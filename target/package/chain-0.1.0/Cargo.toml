@@ -5,7 +5,7 @@ authors = ["Joseph A Mark <sjeohp@gmail.com>"]
 license = "MIT"
 description = "blockchain generation framework"
 repository = "https://github.com/sjeohp/rust-chain.git"
-keywords = ["blockchain", "chain", "distributed", "ledger", "cryptocurrency"]
+keywords = ["blockchain", "block", "chain", "distributed", "ledger", "cryptocurrency", "crypto", "currency"]
 
 [dependencies]
 
