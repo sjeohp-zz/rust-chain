@@ -10,7 +10,7 @@ use std::str;
 
 const NBYTES_U64: usize = 8;
 
-pub fn to_hex_string(bytes: Vec<u8>) -> String
+pub fn to_hex_string(bytes: &[u8]) -> String
 {
   let strs: Vec<String> = bytes.iter().map(|b| format!("{:02x}", b)).collect();
   strs.join("")
@@ -37,34 +37,54 @@ pub struct Tx
     pub hash:       [u8; 32],
 }
 
-pub fn tx_hash(tx: Tx) -> Vec<u8>
+impl Tx
 {
-    let mut txi_buf: Vec<u8> = vec![];
-    for x in tx.inputs
+    pub fn new(
+        inputs: Vec<Txi>,
+        outputs: Vec<Txo>,
+        timestamp: u64
+    ) -> Tx
     {
-        let mut buf = [0; NBYTES_U64];
-        BigEndian::write_u64(&mut buf, x.src_idx);
-        txi_buf.extend_from_slice(&x.src_hash);
-        txi_buf.extend_from_slice(&buf);
-        txi_buf.extend_from_slice(&x.signature);
+        let mut tx = Tx {
+            inputs: inputs,
+            outputs: outputs,
+            timestamp: timestamp,
+            hash: [0; 32]
+        };
+        let tx_hash = tx.gen_hash();
+        for i in 0..32 { tx.hash[i] = tx_hash[i]; }
+        tx
     }
 
-    let mut txo_buf: Vec<u8> = vec![];
-    for x in tx.outputs
+    fn gen_hash(&mut self) -> Vec<u8>
     {
-        let mut buf = [0; NBYTES_U64];
-        BigEndian::write_u64(&mut buf, x.amount);
-        txo_buf.extend_from_slice(&buf);
-        txo_buf.extend_from_slice(&x.address);
+        let mut txi_buf: Vec<u8> = vec![];
+        for x in &self.inputs
+        {
+            let mut buf = [0; NBYTES_U64];
+            BigEndian::write_u64(&mut buf, x.src_idx);
+            txi_buf.extend_from_slice(&x.src_hash);
+            txi_buf.extend_from_slice(&buf);
+            txi_buf.extend_from_slice(&x.signature);
+        }
+
+        let mut txo_buf: Vec<u8> = vec![];
+        for x in &self.outputs
+        {
+            let mut buf = [0; NBYTES_U64];
+            BigEndian::write_u64(&mut buf, x.amount);
+            txo_buf.extend_from_slice(&buf);
+            txo_buf.extend_from_slice(&x.address);
+        }
+
+        let mut tms_buf = [0; NBYTES_U64];
+        BigEndian::write_u64(&mut tms_buf, self.timestamp);
+
+        let mut txn_buf = vec![];
+        txn_buf.extend_from_slice(&txi_buf);
+        txn_buf.extend_from_slice(&txo_buf);
+        txn_buf.extend_from_slice(&mut tms_buf);
+
+        digest::digest(&digest::SHA256, &txn_buf).as_ref().to_vec()
     }
-
-    let mut tms_buf = [0; NBYTES_U64];
-    BigEndian::write_u64(&mut tms_buf, tx.timestamp);
-
-    let mut txn_buf = vec![];
-    txn_buf.extend_from_slice(&txi_buf);
-    txn_buf.extend_from_slice(&txo_buf);
-    txn_buf.extend_from_slice(&mut tms_buf);
-
-    digest::digest(&digest::SHA256, &txn_buf).as_ref().to_vec()
 }
