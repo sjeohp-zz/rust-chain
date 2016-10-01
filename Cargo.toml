@@ -3,7 +3,7 @@ name = "chain"
 version = "0.1.0"
 authors = ["Joseph A Mark <sjeohp@gmail.com>"]
 license = "MIT"
-description = "blockchain"
+description = "chain"
 repository = "https://github.com/sjeohp/rust-chain.git"
 keywords = ["blockchain", "chain", "distributed", "ledger", "cryptocurrency"]
 
