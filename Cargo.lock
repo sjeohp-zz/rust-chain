@@ -1,0 +1,38 @@
+[root]
+name = "chain"
+version = "0.1.0"
+dependencies = [
+ "byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ring 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "untrusted 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "byteorder"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "lazy_static"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "ring"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "lazy_static 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "untrusted 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "untrusted"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[metadata]
+"checksum byteorder 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
+"checksum lazy_static 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "49247ec2a285bb3dcb23cbd9c35193c025e7251bfce77c1d5da97e6362dffe7f"
+"checksum ring 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "0d2f6547bf9640f1d3cc4e771f82374ec8fd237c17eeb3ff5cd5ccbe22377a09"
+"checksum untrusted 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "5d9bc0e6e73a10975d1fbff8ac3541e221181b0d8998351600fb5523de634c0d"
