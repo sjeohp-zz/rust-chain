@@ -1,7 +1,7 @@
 [package]
 name = "chain"
 version = "0.1.1"
-authors = ["Joseph A Mark <sjeohp@gmail.com>"]
+authors = ["J A Mark <sjeohp@gmail.com>"]
 license = "MIT"
 description = "chain"
 repository = "https://github.com/sjeohp/rust-chain.git"

@@ -6,15 +6,7 @@ use self::ring::{digest};
 
 use self::byteorder::{ByteOrder, BigEndian};
 
-use std::str;
-
-const NBYTES_U64: usize = 8;
-
-pub fn to_hex_string(bytes: &[u8]) -> String
-{
-  let strs: Vec<String> = bytes.iter().map(|b| format!("{:02x}", b)).collect();
-  strs.join("")
-}
+use util::{NBYTES_U64};
 
 pub struct Txi
 {
@@ -67,7 +59,6 @@ impl Tx
             txi_buf.extend_from_slice(&buf);
             txi_buf.extend_from_slice(&x.signature);
         }
-
         let mut txo_buf: Vec<u8> = vec![];
         for x in &self.outputs
         {
@@ -76,15 +67,12 @@ impl Tx
             txo_buf.extend_from_slice(&buf);
             txo_buf.extend_from_slice(&x.address);
         }
-
         let mut tms_buf = [0; NBYTES_U64];
         BigEndian::write_u64(&mut tms_buf, self.timestamp);
-
         let mut txn_buf = vec![];
         txn_buf.extend_from_slice(&txi_buf);
         txn_buf.extend_from_slice(&txo_buf);
         txn_buf.extend_from_slice(&mut tms_buf);
-
         digest::digest(&digest::SHA256, &txn_buf).as_ref().to_vec()
     }
 }
