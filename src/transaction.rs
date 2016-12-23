@@ -6,7 +6,7 @@ use self::ring::{digest};
 
 use self::byteorder::{ByteOrder, BigEndian};
 
-use util::{NBYTES_U64};
+use util::{NBYTES_U64, NBYTES_U32};
 
 pub struct Txi
 {
