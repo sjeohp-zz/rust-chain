@@ -1,6 +1,18 @@
 pub mod block;
 pub mod transaction;
 mod util;
+mod network;
+
+use transaction::*;
+use block::*;
+use util::*;
+use network::*;
+use std::env;
+
+pub fn main()
+{
+    start_server(env::args().nth(1));
+}
 
 #[cfg(test)]
 mod tests {
@@ -8,8 +20,11 @@ mod tests {
     use transaction::*;
     use block::*;
     use util::*;
+    use network::*;
+    use std::env;
 
     #[test]
+    #[ignore]
     fn test_new_transaction()
     {
         let tx = Tx::new(
@@ -26,6 +41,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_block()
     {
         let tx = Tx::new(
@@ -48,5 +64,11 @@ mod tests {
         );
         println!("block hash: {:?}", to_hex_string(&block.block_hash));
         println!("txs hash: {:?}", to_hex_string(&block.txs_hash));
+    }
+
+    #[test]
+    fn test_network()
+    {
+        start_server(env::args().nth(0));  
     }
 }
