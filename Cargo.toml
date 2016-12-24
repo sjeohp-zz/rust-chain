@@ -14,3 +14,5 @@ byteorder = "0.5.3"
 mio = "0.6"
 chrono = { version = "0.2", features = ["serde"] }
 postgres = "0.13.4"
+rand = "*"
+time = "*"
