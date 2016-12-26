@@ -3,13 +3,13 @@ extern crate chrono;
 extern crate postgres;
 extern crate byteorder;
 extern crate rand;
-// extern crate time;
 
 use self::byteorder::{ByteOrder, BigEndian};
 
 use util::{NBYTES_U64, NBYTES_U32};
 
 use self::mio::*;
+use self::mio::channel::{channel, Receiver};
 use self::mio::tcp::{TcpListener, TcpStream};
 
 use self::chrono::*;
@@ -25,8 +25,10 @@ use std::thread;
 
 use self::rand::{thread_rng, Rng};
 
+const QUIT_TOKEN: Token = Token(0);
+const SERVER_TOKEN: Token = Token(1);
+const CLIENT_TOKEN_COUNTER: usize = 2;
 const LOCALHOST: &'static str = "127.0.0.1";
-const SERVER_TOKEN: Token = Token(0);
 const SERVER_DEFAULT_PORT: &'static str = "9001";
 
 #[derive(Clone, Debug)]
@@ -131,8 +133,16 @@ pub fn bootstrap(
     peers
 }
 
-pub fn start_server(port: Option<String>)
+pub fn start_server(port: Option<String>, quit_rcv: Receiver<()>)
 {
+    let poll = Poll::new().expect("Failed to create poll");
+
+    poll.register(
+        &quit_rcv,
+        QUIT_TOKEN,
+        Ready::readable(),
+        PollOpt::level()).expect("Failed to register UI receiver channel");
+
     let port = match port
     {
         Some(port) => {
@@ -143,7 +153,6 @@ pub fn start_server(port: Option<String>)
         }
     };
     let addr = (LOCALHOST.to_string() + ":" + &port).parse().expect("Failed to parse server addr");
-    let poll = Poll::new().expect("Failed to create poll");
     let server = TcpListener::bind(&addr).unwrap();
 
     poll.register(
@@ -152,7 +161,7 @@ pub fn start_server(port: Option<String>)
         Ready::readable(),
         PollOpt::level()).expect("Failed to register server socket");
 
-    let mut token_counter: usize = 0;
+    let mut token_counter: usize = CLIENT_TOKEN_COUNTER;
     let mut clients: HashMap<Token, TcpStream> = HashMap::new();
     let mut events = Events::with_capacity(1024);
 
@@ -185,7 +194,7 @@ pub fn start_server(port: Option<String>)
             .unwrap();
     }
 
-    loop
+    'event_loop: loop
     {
         poll.poll(&mut events, None).unwrap();
 
@@ -194,6 +203,15 @@ pub fn start_server(port: Option<String>)
             println!("EVENT");
             match event.token()
             {
+                QUIT_TOKEN => {
+                    println!("handle quit");
+                    handle_quit(
+                        LOCALHOST,
+                        &port,
+                        peers);
+                    break 'event_loop;
+                }
+
                 SERVER_TOKEN => {
                     println!("handle connection");
                     handle_connection(
@@ -215,6 +233,17 @@ pub fn start_server(port: Option<String>)
                 }
             }
         }
+    }
+}
+
+fn handle_quit(
+    server_ip: &str,
+    server_port: &str,
+    peers: Vec<Peer>)
+{
+    for peer in peers
+    {
+        snd_remp(server_ip, server_port, &mut peer.socket.unwrap());
     }
 }
 
@@ -481,6 +510,37 @@ fn rcv_addp(
         None => { return false; }
     }
     return true;
+}
+
+fn snd_remp(
+    addr: &str,
+    port: &str,
+    stream: &mut net::TcpStream)
+{
+    let mut mgc = [0; NBYTES_U32];
+    BigEndian::write_u32(&mut mgc, 0);
+    let mut cmd = b"remp";
+    let mut len = [0; NBYTES_U32];
+    let mut sum = b"    ";
+    let mut pay = addr.to_string() + ":" + port;
+    BigEndian::write_u32(&mut len, pay.len() as u32);
+    let mut msg = vec![];
+    msg.extend_from_slice(&mgc);
+    msg.extend_from_slice(cmd);
+    msg.extend_from_slice(&len);
+    msg.extend_from_slice(sum);
+    msg.extend_from_slice(pay.as_bytes());
+
+    match stream.write(&msg)
+    {
+        Ok(nbytes) => {
+            println!("bytes written: {}", nbytes);
+        }
+        Err(e) => {
+            println!("Error writing to stream: {}", e);
+        }
+    }
+    stream.flush();
 }
 
 fn rcv_remp(

@@ -9,9 +9,53 @@ use util::*;
 use network::*;
 use std::env;
 
+extern crate mio;
+use self::mio::channel::{channel};
+
+extern crate rustyline;
+use self::rustyline::error::ReadlineError;
+use self::rustyline::Editor;
+
+use std::thread;
+
 pub fn main()
 {
-    start_server(env::args().nth(1));
+    let (quit, quit_rcv) = channel::<()>();
+    let network_child = thread::spawn(move || {
+        start_server(env::args().nth(1), quit_rcv);
+    });
+
+    let mut rl = Editor::<()>::new();
+    if let Err(_) = rl.load_history("history.txt") {
+        println!("No previous history.");
+    }
+
+    loop {
+        let readline = rl.readline(">> ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(&line);
+                println!("Line: {}", line);
+            },
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                quit.send(());
+                network_child.join();
+                break
+            },
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                quit.send(());
+                network_child.join();
+                break
+            },
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break
+            }
+        }
+    }
+    rl.save_history("history.txt").unwrap();
 }
 
 #[cfg(test)]
@@ -69,6 +113,6 @@ mod tests {
     #[test]
     fn test_network()
     {
-        start_server(env::args().nth(0));  
+        start_server(env::args().nth(0));
     }
 }

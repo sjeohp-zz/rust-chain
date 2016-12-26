@@ -16,3 +16,4 @@ chrono = { version = "0.2", features = ["serde"] }
 postgres = "0.13.4"
 rand = "*"
 time = "*"
+rustyline = "*"
