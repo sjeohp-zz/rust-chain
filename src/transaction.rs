@@ -14,14 +14,14 @@ use std::mem::size_of;
 pub struct Txi
 {
     pub src_hash:   [u8; 32],
-    pub src_idx:    u64,
+    pub src_idx:    i64,
     pub signature:  [u8; 32],
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Txo
 {
-    pub amount:     u64,
+    pub amount:     i64,
     pub address:    [u8; 32],
 }
 
@@ -29,7 +29,7 @@ pub struct Txo
 pub struct Tx
 {
     pub hash:       [u8; 32],
-    pub timestamp:  u64,
+    pub timestamp:  i64,
     pub inputs:     Vec<Txi>,
     pub outputs:    Vec<Txo>,
 }
@@ -39,7 +39,7 @@ impl Tx
     pub fn new(
         inputs: Vec<Txi>,
         outputs: Vec<Txo>,
-        timestamp: u64
+        timestamp: i64
     ) -> Tx
     {
         let mut tx = Tx {
@@ -56,7 +56,7 @@ impl Tx
     pub fn from_slice(bytes: &[u8]) -> Tx
     {
         let hash = &bytes[..32];
-        let timestamp = BigEndian::read_u64(&bytes[32..40]);
+        let timestamp = BigEndian::read_i64(&bytes[32..40]);
         let mut idx: usize = 40;
         let inp_len = (BigEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<Txi>();
         idx += 4;
@@ -71,7 +71,7 @@ impl Tx
         {
             let mut txi = Txi {
                 src_hash: [0; 32],
-                src_idx: BigEndian::read_u64(&input_bytes[(i*size_of::<Txi>()+32)..(i*size_of::<Txi>()+40)]),
+                src_idx: BigEndian::read_i64(&input_bytes[(i*size_of::<Txi>()+32)..(i*size_of::<Txi>()+40)]),
                 signature: [0; 32]
             };
             txi.src_hash.clone_from_slice(&input_bytes[(i*size_of::<Txi>()) as usize..(i*size_of::<Txi>()+32) as usize]);
@@ -83,7 +83,7 @@ impl Tx
         for i in 0..(out_len / size_of::<Txo>())
         {
             let mut txo = Txo {
-                amount: BigEndian::read_u64(&output_bytes[(i*size_of::<Txo>()) as usize..(i*size_of::<Txo>()+8) as usize]),
+                amount: BigEndian::read_i64(&output_bytes[(i*size_of::<Txo>()) as usize..(i*size_of::<Txo>()+8) as usize]),
                 address: [0; 32]
             };
             txo.address.clone_from_slice(&output_bytes[(i*size_of::<Txo>()+8) as usize..(i*size_of::<Txo>()+40) as usize]);
@@ -106,7 +106,7 @@ impl Tx
         let mut array = vec![];
         array.extend_from_slice(&self.hash);
         let mut ts_buf = [0; NBYTES_U64];
-        BigEndian::write_u64(&mut ts_buf, self.timestamp);
+        BigEndian::write_i64(&mut ts_buf, self.timestamp);
         array.extend_from_slice(&ts_buf);
 
         let mut inplen_buf = [0; NBYTES_U32];
@@ -117,7 +117,7 @@ impl Tx
         {
             array.extend_from_slice(&txi.src_hash);
             let mut idx_buf = [0; NBYTES_U64];
-            BigEndian::write_u64(&mut idx_buf, txi.src_idx);
+            BigEndian::write_i64(&mut idx_buf, txi.src_idx);
             array.extend_from_slice(&idx_buf);
             array.extend_from_slice(&txi.signature);
         }
@@ -129,7 +129,7 @@ impl Tx
         for txo in self.outputs.iter()
         {
             let mut amt_buf = [0; NBYTES_U64];
-            BigEndian::write_u64(&mut amt_buf, txo.amount);
+            BigEndian::write_i64(&mut amt_buf, txo.amount);
             array.extend_from_slice(&amt_buf);
             array.extend_from_slice(&txo.address);
         }
@@ -143,7 +143,7 @@ impl Tx
         for x in &self.inputs
         {
             let mut buf = [0; NBYTES_U64];
-            BigEndian::write_u64(&mut buf, x.src_idx);
+            BigEndian::write_i64(&mut buf, x.src_idx);
             txi_buf.extend_from_slice(&x.src_hash);
             txi_buf.extend_from_slice(&buf);
             txi_buf.extend_from_slice(&x.signature);
@@ -152,12 +152,12 @@ impl Tx
         for x in &self.outputs
         {
             let mut buf = [0; NBYTES_U64];
-            BigEndian::write_u64(&mut buf, x.amount);
+            BigEndian::write_i64(&mut buf, x.amount);
             txo_buf.extend_from_slice(&buf);
             txo_buf.extend_from_slice(&x.address);
         }
         let mut tms_buf = [0; NBYTES_U64];
-        BigEndian::write_u64(&mut tms_buf, self.timestamp);
+        BigEndian::write_i64(&mut tms_buf, self.timestamp);
         let mut txn_buf = vec![];
         txn_buf.extend_from_slice(&mut tms_buf);
         txn_buf.extend_from_slice(&txi_buf);

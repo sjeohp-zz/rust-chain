@@ -56,7 +56,26 @@ pub fn bootstrap(
                     let mut addp = Msg::new_add_peer(server_addr, server_port).to_vec();
                     let mut lisp = Msg::new_list_peers(server_addr, server_port).to_vec();
 
+                    let mut tx0 = Tx::new(
+                        vec![
+                            Txi {
+                                src_hash:   [1; 32],
+                                src_idx:    2,
+                                signature:  [3; 32]
+                            }
+                        ],
+                        vec![
+                            Txo {
+                                amount: 4,
+                                address: [5; 32]
+                            }
+                        ],
+                        6
+                    );
+                    let mut addt = Msg::new_add_transaction(tx0.to_vec()).to_vec();
+
                     addp.append(&mut lisp);
+                    addp.append(&mut addt);
 
                     match stream.write(&addp)
                     {
@@ -290,6 +309,10 @@ fn handle_message(
                             }
                             b"addt        " => {
                                 print!(" add transaction\n");
+
+                                rcv_addt(
+                                    &msg.payload,
+                                    db);
                             }
                             b"vdlt        " => {
                                 print!(" validate transaction\n");
@@ -480,12 +503,37 @@ fn rcv_resp_lisp(
     }
 }
 
-fn rcv_addt(
+pub fn rcv_addt(
     payload: &[u8],
-    server: &TcpListener,
-    peers: &mut Vec<Peer>,
     db: &Connection)
 {
     let tx = Tx::from_slice(payload);
 
+    db.execute("BEGIN WORK;", &[]).unwrap();
+    db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
+    if db.execute(
+        "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
+        &[&tx.hash.as_ref()])
+        .unwrap() == 1
+    {
+        db.execute(
+            "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
+            &[&tx.hash.as_ref(), &tx.timestamp])
+            .unwrap();
+        for txi in tx.inputs.iter()
+        {
+            db.execute(
+                "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, (SELECT id FROM transactions WHERE hash = $4)",
+                &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
+                .unwrap();
+        }
+        for txo in tx.outputs.iter()
+        {
+            db.execute(
+                "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, (SELECT id FROM transactions WHERE hash = $3)",
+                &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
+                .unwrap();
+        }
+    }
+    db.execute("COMMIT WORK;", &[]).unwrap();
 }
