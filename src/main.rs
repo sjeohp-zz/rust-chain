@@ -1,9 +1,13 @@
 pub mod block;
 pub mod transaction;
+pub mod message;
+pub mod peer;
 mod util;
 mod network;
 
+use peer::*;
 use transaction::*;
+use message::*;
 use block::*;
 use util::*;
 use network::*;
@@ -61,27 +65,43 @@ pub fn main()
 #[cfg(test)]
 mod tests {
 
+    use message::*;
     use transaction::*;
     use block::*;
     use util::*;
     use network::*;
     use std::env;
 
+    extern crate mio;
+    use self::mio::channel::{channel};
+
+    extern crate rustyline;
+    use self::rustyline::error::ReadlineError;
+    use self::rustyline::Editor;
+
+    use std::thread;
+
     #[test]
-    #[ignore]
     fn test_new_transaction()
     {
-        let tx = Tx::new(
-            vec![],
+        let mut tx0 = Tx::new(
             vec![
-                Txo {
-                    amount: 0,
-                    address: [0; 32]
+                Txi {
+                    src_hash:   [1; 32],
+                    src_idx:    2,
+                    signature:  [3; 32]
                 }
             ],
-            0
+            vec![
+                Txo {
+                    amount: 4,
+                    address: [5; 32]
+                }
+            ],
+            6
         );
-        println!("hash: {:?}", to_hex_string(&tx.hash));
+        let tx1 = Tx::from_slice(&tx0.to_vec());
+        assert!(tx0 == tx1);
     }
 
     #[test]
@@ -111,8 +131,12 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_network()
     {
-        start_server(env::args().nth(0));
+        let (quit, quit_rcv) = channel::<()>();
+        let network_child = thread::spawn(move || {
+            start_server(env::args().nth(1), quit_rcv);
+        });
     }
 }
