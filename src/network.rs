@@ -59,9 +59,9 @@ pub fn bootstrap(
                     let mut tx0 = Tx::new(
                         vec![
                             Txi {
-                                src_hash:   [1; 32],
+                                src_hash:   [1; 64],
                                 src_idx:    2,
-                                signature:  [3; 32]
+                                signature:  [3; 64]
                             }
                         ],
                         vec![
@@ -507,33 +507,40 @@ pub fn rcv_addt(
     payload: &[u8],
     db: &Connection)
 {
-    let tx = Tx::from_slice(payload);
+    let mut tx = Tx::from_slice(payload);
 
-    db.execute("BEGIN WORK;", &[]).unwrap();
-    db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-    if db.execute(
-        "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
-        &[&tx.hash.as_ref()])
-        .unwrap() == 1
+    if tx.verify()
     {
-        db.execute(
-            "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
-            &[&tx.hash.as_ref(), &tx.timestamp])
-            .unwrap();
-        for txi in tx.inputs.iter()
+        db.execute("BEGIN WORK;", &[]).unwrap();
+        db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
+        if db.execute(
+            "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
+            &[&tx.hash.as_ref()])
+            .unwrap() == 1
         {
             db.execute(
-                "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, (SELECT id FROM transactions WHERE hash = $4)",
-                &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
+                "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
+                &[&tx.hash.as_ref(), &tx.timestamp])
                 .unwrap();
+            for txi in tx.inputs.iter()
+            {
+                db.execute(
+                    "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, (SELECT id FROM transactions WHERE hash = $4)",
+                    &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
+                    .unwrap();
+            }
+            for txo in tx.outputs.iter()
+            {
+                db.execute(
+                    "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, (SELECT id FROM transactions WHERE hash = $3)",
+                    &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
+                    .unwrap();
+            }
         }
-        for txo in tx.outputs.iter()
-        {
-            db.execute(
-                "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, (SELECT id FROM transactions WHERE hash = $3)",
-                &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
-                .unwrap();
-        }
+        db.execute("COMMIT WORK;", &[]).unwrap();
     }
-    db.execute("COMMIT WORK;", &[]).unwrap();
+    else
+    {
+        println!("Invalid transaction");
+    }
 }

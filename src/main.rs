@@ -1,4 +1,5 @@
 pub mod block;
+pub mod wallet;
 pub mod transaction;
 pub mod message;
 pub mod peer;
@@ -6,6 +7,7 @@ mod util;
 mod network;
 
 use peer::*;
+use wallet::*;
 use transaction::*;
 use message::*;
 use block::*;
@@ -66,6 +68,7 @@ pub fn main()
 mod tests {
 
     use message::*;
+    use wallet::*;
     use transaction::*;
     use block::*;
     use util::*;
