@@ -2,7 +2,7 @@ extern crate mio;
 extern crate byteorder;
 extern crate rand;
 
-use self::byteorder::{ByteOrder, BigEndian};
+use self::byteorder::{ByteOrder, LittleEndian};
 
 use util::{NBYTES_U64, NBYTES_U32};
 
@@ -48,12 +48,12 @@ impl Msg
                                 {
                                     Ok(_) =>
                                     {
-                                        let paylen = BigEndian::read_u32(&len);
+                                        let paylen = LittleEndian::read_u32(&len);
                                         let mut pay = vec![];
                                         let mut take = stream.take(paylen as u64);
                                         let _ = take.read_to_end(&mut pay);
                                         let mut msg = Msg {
-                                            magic: BigEndian::read_u32(&mgc),
+                                            magic: LittleEndian::read_u32(&mgc),
                                             command: [0; 12],
                                             length: paylen,
                                             checksum: sum,
@@ -90,9 +90,9 @@ impl Msg
     pub fn to_vec(&self) -> Vec<u8>
     {
         let mut mgc = [0; NBYTES_U32];
-        BigEndian::write_u32(&mut mgc, self.magic);
+        LittleEndian::write_u32(&mut mgc, self.magic);
         let mut len = [0; NBYTES_U32];
-        BigEndian::write_u32(&mut len, self.length);
+        LittleEndian::write_u32(&mut len, self.length);
         let mut msg = vec![];
         msg.extend_from_slice(&mgc);
         msg.extend_from_slice(&self.command);

@@ -4,7 +4,7 @@ extern crate byteorder;
 
 use self::ring::{digest};
 
-use self::byteorder::{ByteOrder, BigEndian};
+use self::byteorder::{ByteOrder, LittleEndian};
 
 use transaction::*;
 use util::{NBYTES_U64};
@@ -59,10 +59,10 @@ impl Block
         block_buf.extend_from_slice(&self.parent_hash);
         block_buf.extend_from_slice(&self.target);
         let mut tms_buf = [0; NBYTES_U64];
-        BigEndian::write_u64(&mut tms_buf, self.timestamp);
+        LittleEndian::write_u64(&mut tms_buf, self.timestamp);
         block_buf.extend_from_slice(&tms_buf);
         let mut nonce_buf = [0; NBYTES_U64];
-        BigEndian::write_u64(&mut nonce_buf, self.nonce);
+        LittleEndian::write_u64(&mut nonce_buf, self.nonce);
         block_buf.extend_from_slice(&nonce_buf);
         digest::digest(&digest::SHA256, &block_buf).as_ref().to_vec()
     }

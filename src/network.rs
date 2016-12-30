@@ -4,7 +4,7 @@ extern crate postgres;
 extern crate byteorder;
 extern crate rand;
 
-use self::byteorder::{ByteOrder, BigEndian};
+use self::byteorder::{ByteOrder, LittleEndian};
 
 use util::{NBYTES_U64, NBYTES_U32};
 
@@ -308,8 +308,6 @@ fn handle_message(
                                 print!(" balance\n");
                             }
                             b"addt        " => {
-                                print!(" add transaction\n");
-
                                 rcv_addt(
                                     &msg.payload,
                                     db);
@@ -507,8 +505,9 @@ pub fn rcv_addt(
     payload: &[u8],
     db: &Connection)
 {
-    let mut tx = Tx::from_slice(payload);
+    println!("rcv_addt");
 
+    let mut tx = Tx::from_slice(payload);
     if tx.verify()
     {
         db.execute("BEGIN WORK;", &[]).unwrap();
