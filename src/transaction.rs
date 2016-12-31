@@ -15,7 +15,7 @@ use wallet::*;
 // #[derive(Clone, Debug, PartialEq)]
 pub struct Txi
 {
-    pub src_hash:   [u8; 64],
+    pub src_hash:   [u8; 32],
     pub src_idx:    i64,
     pub signature:  [u8; 64],
 }
@@ -30,7 +30,7 @@ pub struct Txo
 // #[derive(Clone, Debug, PartialEq)]
 pub struct Tx
 {
-    pub hash:       [u8; 64],
+    pub hash:       [u8; 32],
     pub timestamp:  i64,
     pub inputs:     Vec<Txi>,
     pub outputs:    Vec<Txo>,
@@ -45,16 +45,50 @@ impl Tx
     ) -> Tx
     {
         let mut tx = Tx {
-            hash: [0; 64],
+            hash: [0; 32],
             timestamp: timestamp,
             inputs: inputs,
             outputs: outputs,
         };
-        tx.sign();
+        tx.sign_inputs();
+        tx.hash_contents();
         tx
     }
 
     fn signable_vec(&self) -> Vec<u8>
+    {
+        let mut txi_buf: Vec<u8> = vec![];
+        for x in &self.inputs
+        {
+            let mut buf = [0; NBYTES_U64];
+            LittleEndian::write_i64(&mut buf, x.src_idx);
+            txi_buf.extend_from_slice(&x.src_hash);
+            txi_buf.extend_from_slice(&buf);
+        }
+        let mut txo_buf: Vec<u8> = vec![];
+        for x in &self.outputs
+        {
+            let mut buf = [0; NBYTES_U64];
+            LittleEndian::write_i64(&mut buf, x.amount);
+            txo_buf.extend_from_slice(&buf);
+            txo_buf.extend_from_slice(&x.address);
+        }
+        let mut txn_buf = vec![];
+        txn_buf.extend_from_slice(&txi_buf);
+        txn_buf.extend_from_slice(&txo_buf);
+        txn_buf
+    }
+
+    fn sign_inputs(&mut self)
+    {
+        let signature = signature(&self.signable_vec());
+        for txi in &mut self.inputs
+        {
+            txi.signature.clone_from_slice(&signature);
+        }
+    }
+
+    fn hashable_vec(&self) -> Vec<u8>
     {
         let mut txi_buf: Vec<u8> = vec![];
         for x in &self.inputs
@@ -81,15 +115,10 @@ impl Tx
         txn_buf
     }
 
-    fn sign(&mut self)
+    fn hash_contents(&mut self)
     {
-        let signature = signature(&self.signable_vec());
-
-        self.hash.clone_from_slice(&signature);
-        for txi in &mut self.inputs
-        {
-            txi.signature.clone_from_slice(&signature);
-        }
+        let buf = self.hashable_vec();
+        self.hash.clone_from_slice(&digest::digest(&digest::SHA256, &buf).as_ref().to_vec());
     }
 
     pub fn verify(&mut self) -> bool
@@ -98,22 +127,19 @@ impl Tx
         let mut private_key: [u8; 32] = [0; 32];
         get_or_gen_wallet(&mut public_key, &mut private_key);
 
-        let mut valid = verify(&self.signable_vec(), &self.hash, &public_key);
-        for txi in &mut self.inputs
+        let mut valid = true;
+        for txi in &mut self.inputs.iter()
         {
-            for i in 0..64
-            {
-                if self.hash[i] != txi.signature[i] { valid = false; }
-            }
+            if !verify(&self.signable_vec(), &txi.signature, &public_key) { valid = false; }
         }
         return valid
     }
 
     pub fn from_slice(bytes: &[u8]) -> Tx
     {
-        let hash = &bytes[..64];
-        let timestamp = LittleEndian::read_i64(&bytes[64..72]);
-        let mut idx: usize = 72;
+        let hash = &bytes[..32];
+        let timestamp = LittleEndian::read_i64(&bytes[32..40]);
+        let mut idx: usize = 40;
         let inp_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<Txi>();
         idx += 4;
         let input_bytes = &bytes[idx..idx+(inp_len)];
@@ -126,12 +152,12 @@ impl Tx
         for i in 0..(inp_len / size_of::<Txi>())
         {
             let mut txi = Txi {
-                src_hash: [0; 64],
-                src_idx: LittleEndian::read_i64(&input_bytes[(i*size_of::<Txi>()+64)..(i*size_of::<Txi>()+72)]),
+                src_hash: [0; 32],
+                src_idx: LittleEndian::read_i64(&input_bytes[(i*size_of::<Txi>()+32)..(i*size_of::<Txi>()+40)]),
                 signature: [0; 64]
             };
-            txi.src_hash.clone_from_slice(&input_bytes[(i*size_of::<Txi>()) as usize..(i*size_of::<Txi>()+64) as usize]);
-            txi.signature.clone_from_slice(&input_bytes[(i*size_of::<Txi>()+72) as usize..(i*size_of::<Txi>()+136) as usize]);
+            txi.src_hash.clone_from_slice(&input_bytes[(i*size_of::<Txi>()) as usize..(i*size_of::<Txi>()+32) as usize]);
+            txi.signature.clone_from_slice(&input_bytes[(i*size_of::<Txi>()+40) as usize..(i*size_of::<Txi>()+104) as usize]);
             inputs.push(txi);
         }
 
@@ -150,7 +176,7 @@ impl Tx
             inputs: inputs,
             outputs: outputs,
             timestamp: timestamp,
-            hash: [0; 64]
+            hash: [0; 32]
         };
         tx.hash.clone_from_slice(&hash);
 

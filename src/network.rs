@@ -59,7 +59,7 @@ pub fn bootstrap(
                     let mut tx0 = Tx::new(
                         vec![
                             Txi {
-                                src_hash:   [1; 64],
+                                src_hash:   [1; 32],
                                 src_idx:    2,
                                 signature:  [3; 64]
                             }
