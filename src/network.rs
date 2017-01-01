@@ -35,6 +35,111 @@ const CLIENT_TOKEN_COUNTER: usize = 2;
 const LOCALHOST: &'static str = "127.0.0.1";
 const SERVER_DEFAULT_PORT: &'static str = "9001";
 
+pub fn start_server(
+    port: Option<String>,
+    quit_rcv: Receiver<()>)
+{
+    let db_url = "postgresql://chain@localhost:5432/chaindb";
+    let db = Connection::connect(db_url, TlsMode::None).expect("Unable to connect to database");
+    
+    let poll = Poll::new().expect("Failed to create poll");
+
+    poll.register(
+        &quit_rcv,
+        QUIT_TOKEN,
+        Ready::readable(),
+        PollOpt::level()).expect("Failed to register UI receiver channel");
+
+    let port = match port
+    {
+        Some(port) => {
+            port
+        }
+        None => {
+            SERVER_DEFAULT_PORT.to_string()
+        }
+    };
+    let addr = (LOCALHOST.to_string() + ":" + &port).parse().expect("Failed to parse server addr");
+    let server = TcpListener::bind(&addr).unwrap();
+
+    poll.register(
+        &server,
+        SERVER_TOKEN,
+        Ready::readable(),
+        PollOpt::level()).expect("Failed to register server socket");
+
+    let mut token_counter: usize = CLIENT_TOKEN_COUNTER;
+    let mut clients: HashMap<Token, TcpStream> = HashMap::new();
+    let mut events = Events::with_capacity(1024);
+
+    println!("Listening on {}", addr);
+
+    let peer_history = db.query(
+        "SELECT id, ip, port, timestamp FROM peers ORDER BY timestamp DESC;",
+        &[])
+        .unwrap()
+        .iter()
+        .map(|row| Peer {
+            id: row.get(0),
+            addr: row.get(1),
+            port: row.get(2),
+            timestamp: row.get(3),
+            socket: None
+        })
+        .collect();
+
+    let mut peers = bootstrap(LOCALHOST, &port, peer_history);
+
+    for peer in &peers
+    {
+        db.execute(
+            "UPDATE peers SET timestamp = $1 WHERE id = $2",
+            &[&peer.timestamp, &peer.id])
+            .unwrap();
+    }
+
+    'event_loop: loop
+    {
+        poll.poll(&mut events, None).unwrap();
+
+        for event in events.iter()
+        {
+            println!("EVENT");
+            match event.token()
+            {
+                QUIT_TOKEN => {
+                    println!("handle quit");
+                    handle_quit(
+                        LOCALHOST,
+                        &port,
+                        peers);
+                    break 'event_loop;
+                }
+
+                SERVER_TOKEN => {
+                    println!("handle connection");
+                    handle_connection(
+                        &server,
+                        &mut token_counter,
+                        &poll,
+                        &mut clients);
+                }
+
+                token => {
+                    println!("handle message");
+                    handle_message(
+                        &server,
+                        token,
+                        &mut clients,
+                        &mut peers,
+                        &db
+                    );
+                }
+            }
+        }
+    }
+}
+
 pub fn bootstrap(
     server_addr: &str,
     server_port: &str,
@@ -104,109 +209,6 @@ pub fn bootstrap(
         }
     }
     peers
-}
-
-pub fn start_server(port: Option<String>, quit_rcv: Receiver<()>)
-{
-    let poll = Poll::new().expect("Failed to create poll");
-
-    poll.register(
-        &quit_rcv,
-        QUIT_TOKEN,
-        Ready::readable(),
-        PollOpt::level()).expect("Failed to register UI receiver channel");
-
-    let port = match port
-    {
-        Some(port) => {
-            port
-        }
-        None => {
-            SERVER_DEFAULT_PORT.to_string()
-        }
-    };
-    let addr = (LOCALHOST.to_string() + ":" + &port).parse().expect("Failed to parse server addr");
-    let server = TcpListener::bind(&addr).unwrap();
-
-    poll.register(
-        &server,
-        SERVER_TOKEN,
-        Ready::readable(),
-        PollOpt::level()).expect("Failed to register server socket");
-
-    let mut token_counter: usize = CLIENT_TOKEN_COUNTER;
-    let mut clients: HashMap<Token, TcpStream> = HashMap::new();
-    let mut events = Events::with_capacity(1024);
-
-    println!("Listening on {}", addr);
-
-    let db_url = "postgresql://chain@localhost:5432/chaindb";
-    let db = Connection::connect(db_url, TlsMode::None).expect("Unable to connect to database");
-
-    let peer_history = db.query(
-        "SELECT id, ip, port, timestamp FROM peers ORDER BY timestamp DESC;",
-        &[])
-        .unwrap()
-        .iter()
-        .map(|row| Peer {
-            id: row.get(0),
-            addr: row.get(1),
-            port: row.get(2),
-            timestamp: row.get(3),
-            socket: None
-        })
-        .collect();
-
-    let mut peers = bootstrap(LOCALHOST, &port, peer_history);
-
-    for peer in &peers
-    {
-        db.execute(
-            "UPDATE peers SET timestamp = $1 WHERE id = $2",
-            &[&peer.timestamp, &peer.id])
-            .unwrap();
-    }
-
-    'event_loop: loop
-    {
-        poll.poll(&mut events, None).unwrap();
-
-        for event in events.iter()
-        {
-            println!("EVENT");
-            match event.token()
-            {
-                QUIT_TOKEN => {
-                    println!("handle quit");
-                    handle_quit(
-                        LOCALHOST,
-                        &port,
-                        peers);
-                    break 'event_loop;
-                }
-
-                SERVER_TOKEN => {
-                    println!("handle connection");
-                    handle_connection(
-                        &server,
-                        &mut token_counter,
-                        &poll,
-                        &mut clients);
-                }
-
-                token => {
-                    println!("handle message");
-                    handle_message(
-                        &server,
-                        token,
-                        &mut clients,
-                        &mut peers,
-                        &db
-                    );
-                }
-            }
-        }
-    }
 }
 
 fn handle_quit(

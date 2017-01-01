@@ -38,11 +38,24 @@ pub struct Tx
 
 impl Tx
 {
+    pub fn new_with_hash(
+        hash: &[u8],
+        timestamp: i64) -> Tx
+    {
+        let mut tx = Tx {
+            hash: [0; 32],
+            timestamp: timestamp,
+            inputs: vec![],
+            outputs: vec![],
+        };
+        tx.hash.clone_from_slice(hash);
+        tx
+    }
+
     pub fn new(
         inputs: Vec<Txi>,
         outputs: Vec<Txo>,
-        timestamp: i64
-    ) -> Tx
+        timestamp: i64) -> Tx
     {
         let mut tx = Tx {
             hash: [0; 32],

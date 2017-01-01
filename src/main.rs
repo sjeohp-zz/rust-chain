@@ -5,6 +5,7 @@ pub mod message;
 pub mod peer;
 mod util;
 mod network;
+mod mining;
 
 use peer::*;
 use wallet::*;
@@ -13,6 +14,8 @@ use message::*;
 use block::*;
 use util::*;
 use network::*;
+use mining::*;
+
 use std::env;
 
 extern crate mio;
@@ -24,18 +27,30 @@ use self::rustyline::Editor;
 
 use std::thread;
 
+extern crate postgres;
+use self::postgres::{Connection, TlsMode};
+
 pub fn main()
 {
-    let (quit, quit_rcv) = channel::<()>();
+    let (transaction_snd, transaction_rcv) = channel::<Tx>();
+    let (block_snd, block_rcv) = channel::<Block>();
+    let mining_child = thread::spawn(move || {
+        start_mining(
+            transaction_rcv,
+            block_rcv);
+    });
+
+    let (quit_snd, quit_rcv) = channel::<()>();
     let network_child = thread::spawn(move || {
-        start_server(env::args().nth(1), quit_rcv);
+        start_server(
+            env::args().nth(1),
+            quit_rcv);
     });
 
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history("history.txt") {
         println!("No previous history.");
     }
-
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -45,13 +60,13 @@ pub fn main()
             },
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                quit.send(());
+                quit_snd.send(());
                 network_child.join();
                 break
             },
             Err(ReadlineError::Eof) => {
                 println!("CTRL-D");
-                quit.send(());
+                quit_snd.send(());
                 network_child.join();
                 break
             },

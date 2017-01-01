@@ -16,4 +16,4 @@ psql -d chaindb -U chain -c "SELECT 1 FROM peers" | grep -q 1 || psql -d chaindb
 # psql -d chaindb -U chain -c "GRANT ALL ON tx_inputs TO chain"
 # psql -d chaindb -U chain -c "GRANT ALL ON tx_outputs TO chain"
 
-cargo run 9001
+RUST_BACKTRACE=1 cargo run 9001
