@@ -20,11 +20,44 @@ pub struct Txi
     pub signature:  [u8; 64],
 }
 
+impl Txi
+{
+    pub fn new(
+        src_hash: &[u8],
+        src_idx: i64,
+        signature: &[u8]) -> Txi
+    {
+        let mut txi = Txi {
+            src_hash: [0; 32],
+            src_idx: src_idx,
+            signature: [0; 64]
+        };
+        txi.src_hash.clone_from_slice(&src_hash);
+        txi.signature.clone_from_slice(&signature);
+        txi
+    }
+}
+
 // #[derive(Clone, Debug, PartialEq)]
 pub struct Txo
 {
     pub amount:     i64,
     pub address:    [u8; 32],
+}
+
+impl Txo
+{
+    pub fn new(
+        amount: i64,
+        address: &[u8]) -> Txo
+    {
+        let mut txo = Txo {
+            amount: amount,
+            address: [0; 32]
+        };
+        txo.address.clone_from_slice(&address);
+        txo
+    }
 }
 
 // #[derive(Clone, Debug, PartialEq)]

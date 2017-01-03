@@ -56,6 +56,36 @@ pub fn start_mining(
                 ))
             .collect();
 
+        for tx in pending_txs.iter_mut()
+        {
+            let inputs: Vec<Txi> = db.query(
+                "SELECT src_hash, src_idx, signature FROM tx_inputs WHERE tx = (SELECT id FROM transactions WHERE hash = $1);",
+                &[&tx.hash.as_ref()])
+                .unwrap()
+                .iter()
+                .map(|row|
+                    Txi::new(
+                        &(row.get::<usize, Vec<u8>>(0)),
+                        row.get(1),
+                        &(row.get::<usize, Vec<u8>>(2))
+                    ))
+                .collect();
+            tx.inputs = inputs;
+
+            let outputs: Vec<Txo> = db.query(
+                "SELECT amount, address FROM tx_outputs WHERE tx = (SELECT id FROM transactions WHERE hash = $1);",
+                &[&tx.hash.as_ref()])
+                .unwrap()
+                .iter()
+                .map(|row|
+                    Txo::new(
+                        row.get(0),
+                        &(row.get::<usize, Vec<u8>>(1))
+                    ))
+                .collect();
+            tx.outputs = outputs;
+        }
+
         let mut target = [0; 32];
         let mut parent_hash = [0; 32];
         if blockchain.len() < 2
