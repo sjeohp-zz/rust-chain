@@ -9,7 +9,7 @@ use self::byteorder::{ByteOrder, LittleEndian};
 use util::{NBYTES_U64, NBYTES_U32};
 
 use self::mio::*;
-use self::mio::channel::{channel, Receiver};
+use self::mio::channel::{channel, Sender, Receiver};
 use self::mio::tcp::{TcpListener, TcpStream};
 
 use self::chrono::*;
@@ -28,20 +28,25 @@ use self::rand::{thread_rng, Rng};
 use transaction::*;
 use peer::*;
 use message::*;
+use block::*;
 
 const QUIT_TOKEN: Token = Token(0);
-const SERVER_TOKEN: Token = Token(1);
-const CLIENT_TOKEN_COUNTER: usize = 2;
+const MINED_BLOCK_TOKEN: Token = Token(1);
+const SERVER_TOKEN: Token = Token(2);
+const CLIENT_TOKEN_COUNTER: usize = 3;
 const LOCALHOST: &'static str = "127.0.0.1";
 const SERVER_DEFAULT_PORT: &'static str = "9001";
 
 pub fn start_server(
     port: Option<String>,
-    quit_rcv: Receiver<()>)
+    quit_rcv: Receiver<()>,
+    transaction_snd_to_mine: Sender<Tx>,
+    block_snd_to_mine: Sender<Block>,
+    block_rcv_from_mine: Receiver<Block>)
 {
     let db_url = "postgresql://chain@localhost:5432/chaindb";
     let db = Connection::connect(db_url, TlsMode::None).expect("Unable to connect to database");
-    
+
     let poll = Poll::new().expect("Failed to create poll");
 
     poll.register(
@@ -49,6 +54,12 @@ pub fn start_server(
         QUIT_TOKEN,
         Ready::readable(),
         PollOpt::level()).expect("Failed to register UI receiver channel");
+
+    poll.register(
+        &block_rcv_from_mine,
+        MINED_BLOCK_TOKEN,
+        Ready::readable(),
+        PollOpt::level()).expect("Failed to register block receiver channel");
 
     let port = match port
     {
@@ -116,6 +127,12 @@ pub fn start_server(
                     break 'event_loop;
                 }
 
+                MINED_BLOCK_TOKEN => {
+                    println!("block received from mine");
+                    let block = block_rcv_from_mine.try_recv().unwrap();
+                    publish_block(block, &peers);
+                }
+
                 SERVER_TOKEN => {
                     println!("handle connection");
                     handle_connection(
@@ -132,7 +149,9 @@ pub fn start_server(
                         token,
                         &mut clients,
                         &mut peers,
-                        &db
+                        &db,
+                        &transaction_snd_to_mine,
+                        &block_snd_to_mine,
                     );
                 }
             }
@@ -185,7 +204,7 @@ pub fn bootstrap(
                     match stream.write(&addp)
                     {
                         Ok(nbytes) => {
-                            println!("snd_addp bytes written: {}", nbytes);
+                            println!("Bytes written: {}", nbytes);
                         }
                         Err(e) => {
                             println!("Error writing to stream: {}", e);
@@ -223,7 +242,7 @@ fn handle_quit(
         match peer.socket.unwrap().write(&remp)
         {
             Ok(nbytes) => {
-                println!("snd_addp bytes written: {}", nbytes);
+                println!("Bytes written: {}", nbytes);
             }
             Err(e) => {
                 println!("Error writing to stream: {}", e);
@@ -266,7 +285,9 @@ fn handle_message(
     token: Token,
     clients: &mut HashMap<Token, TcpStream>,
     peers: &mut Vec<Peer>,
-    db: &Connection)
+    db: &Connection,
+    transaction_snd_to_mine: &Sender<Tx>,
+    block_snd_to_mine: &Sender<Block>)
 {
     // let mut rng = rand::thread_rng();
     // let stutter = time::Duration::from_millis(rng.gen_range::<u64>(0, 5000));
@@ -312,7 +333,8 @@ fn handle_message(
                             b"addt        " => {
                                 rcv_addt(
                                     &msg.payload,
-                                    db);
+                                    db,
+                                    transaction_snd_to_mine);
                             }
                             b"vdlt        " => {
                                 print!(" validate transaction\n");
@@ -327,7 +349,11 @@ fn handle_message(
                                 print!(" get block\n");
                             }
                             b"addb        " => {
-                                print!(" add block\n");
+                                println!("reading block msg {:#?}", &msg.to_vec());
+                                rcv_addb(
+                                    &msg.payload,
+                                    db,
+                                    block_snd_to_mine)
                             }
                             b"geth        " => {
                                 print!(" get block height\n");
@@ -505,7 +531,8 @@ fn rcv_resp_lisp(
 
 pub fn rcv_addt(
     payload: &[u8],
-    db: &Connection)
+    db: &Connection,
+    transaction_snd_to_mine: &Sender<Tx>)
 {
     println!("rcv_addt");
 
@@ -517,7 +544,7 @@ pub fn rcv_addt(
         if db.execute(
             "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
             &[&tx.hash.as_ref()])
-            .unwrap() == 1
+            .unwrap() != 1
         {
             db.execute(
                 "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
@@ -539,9 +566,96 @@ pub fn rcv_addt(
             }
         }
         db.execute("COMMIT WORK;", &[]).unwrap();
+
+        transaction_snd_to_mine.send(tx);
     }
     else
     {
         println!("Invalid transaction");
+    }
+}
+
+pub fn rcv_addb(
+    payload: &[u8],
+    db: &Connection,
+    block_snd_to_mine: &Sender<Block>)
+{
+    println!("rcv_addb");
+    println!("{:#?}", payload);
+    let mut block = Block::from_slice(payload);
+    if block.verify()
+    {
+        db.execute("BEGIN WORK;", &[]).unwrap();
+        db.execute("LOCK TABLE blocks IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
+        db.execute(
+            "INSERT INTO blocks (txs_hash, parent_hash, target, timestamp, nonce, block_hash) SELECT $1, $2, $3, $4, $5, $6",
+            &[&block.txs_hash.as_ref(), &block.parent_hash.as_ref(), &block.target.as_ref(), &block.timestamp, &block.nonce, &block.block_hash.as_ref()])
+            .unwrap();
+
+        db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
+        for tx in block.txs.iter()
+        {
+            if db.execute(
+                "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
+                &[&tx.hash.as_ref()])
+                .unwrap() != 1
+            {
+                db.execute(
+                    "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
+                    &[&tx.hash.as_ref(), &tx.timestamp])
+                    .unwrap();
+                for txi in tx.inputs.iter()
+                {
+                    db.execute(
+                        "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, (SELECT id FROM transactions WHERE hash = $4)",
+                        &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
+                        .unwrap();
+                }
+                for txo in tx.outputs.iter()
+                {
+                    db.execute(
+                        "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, (SELECT id FROM transactions WHERE hash = $3)",
+                        &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
+                        .unwrap();
+                }
+            }
+            else
+            {
+                db.execute(
+                    "UPDATE transactions SET block = (SELECT id FROM blocks WHERE block_hash = $1) WHERE hash = $2",
+                    &[&block.block_hash.as_ref(), &tx.hash.as_ref()])
+                    .unwrap();
+            }
+        }
+        db.execute("COMMIT WORK;", &[]).unwrap();
+
+        block_snd_to_mine.send(block);
+    }
+    else
+    {
+        println!("Invalid block");
+    }
+}
+
+pub fn publish_block(
+    block: Block,
+    peers: &[Peer])
+{
+    let msg = Msg::new_add_block(block.to_vec());
+    for peer in peers.iter()
+    {
+        let p = peer.clone();
+        let mut socket = p.socket.unwrap().try_clone().unwrap();
+        println!("writing block msg {:#?}", &msg.to_vec());
+        match socket.write(&msg.to_vec())
+        {
+            Ok(nbytes) => {
+                println!("Bytes written: {}", nbytes);
+            }
+            Err(e) => {
+                println!("Error writing to stream: {}", e);
+            }
+        }
+        socket.flush();
     }
 }

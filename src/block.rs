@@ -26,8 +26,8 @@ pub struct Block
 impl Block
 {
     pub fn new(
-        txs: Vec<Tx>,
         txs_hash: &[u8],
+        txs: Vec<Tx>,
         parent_hash: &[u8],
         target: &[u8],
         timestamp: i64,
@@ -70,6 +70,92 @@ impl Block
         block.target.clone_from_slice(target);
         block
     }
+
+    pub fn from_slice(bytes: &[u8]) -> Block
+    {
+        let txs_hash = &bytes[..32];
+
+        let mut idx: usize = 32;
+        let ntxs = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize);
+        idx += 4;
+
+        let mut txs = vec![];
+        for i in 0..ntxs
+        {
+            let tx_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize);
+            idx += 4;
+
+            let tx = Tx::from_slice(&bytes[idx..idx+tx_len]);
+            idx += tx_len;
+
+            txs.push(tx);
+        }
+
+        let parent_hash = &bytes[idx..idx+32];
+        idx += 32;
+        let target = &bytes[idx..idx+32];
+        idx += 32;
+        let timestamp = LittleEndian::read_i64(&bytes[idx..idx+8]);
+        idx += 8;
+        let nonce = LittleEndian::read_i64(&bytes[idx..idx+8]);
+        idx += 8;
+        let block_hash = &bytes[idx..idx+32];
+        idx += 32;
+
+        Block::new(
+            txs_hash,
+            txs,
+            parent_hash,
+            target,
+            timestamp,
+            nonce,
+            block_hash)
+    }
+
+    pub fn to_vec(&self) -> Vec<u8>
+    {
+        let mut array = vec![];
+        array.extend_from_slice(&self.txs_hash);
+
+        let mut ntxs_buf = [0; 4];
+        LittleEndian::write_u32(&mut ntxs_buf, self.txs.len() as u32);
+        array.extend_from_slice(&ntxs_buf);
+
+        for tx in self.txs.iter()
+        {
+            let tx_vec = tx.to_vec();
+            let mut tx_len = [0; 4];
+            LittleEndian::write_u32(&mut ntxs_buf, tx_vec.len() as u32);
+            array.extend_from_slice(&tx_len);
+            array.extend_from_slice(&tx_vec);
+        }
+
+        array.extend_from_slice(&self.parent_hash);
+
+        array.extend_from_slice(&self.target);
+
+        let mut ts_buf = [0; 8];
+        LittleEndian::write_i64(&mut ts_buf, self.timestamp as i64);
+        array.extend_from_slice(&ts_buf);
+
+        let mut nonce_buf = [0; 8];
+        LittleEndian::write_i64(&mut nonce_buf, self.nonce as i64);
+        array.extend_from_slice(&nonce_buf);
+
+        array.extend_from_slice(&self.block_hash);
+
+        array
+    }
+
+    pub fn verify(&mut self) -> bool
+    {
+        let mut tx_verify = true;
+        for tx in self.txs.iter_mut()
+        {
+            if !tx.verify() { tx_verify = false; }
+        }
+        tx_verify && block_hash(self) == self.block_hash.to_vec()
+    }
 }
 
 pub fn txs_hash(txs: &[Tx]) -> Vec<u8>
@@ -96,7 +182,7 @@ pub fn block_hash(block: &Block) -> Vec<u8>
 pub fn mine(block: &mut Block) -> bool
 {
     block.timestamp = UTC::now().timestamp();
-    block.nonce += 1;
+    if block.nonce == i64::max_value() { block.nonce = 0; } else { block.nonce += 1; }
     let hash = block_hash(block);
     block.block_hash.clone_from_slice(&hash);
     block.block_hash < block.target
