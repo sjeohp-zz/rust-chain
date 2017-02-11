@@ -192,4 +192,18 @@ impl Msg
         msg.command.clone_from_slice(b"addb        ");
         msg
     }
+
+    pub fn new_get_block(bytes: Vec<u8>) -> Msg
+    {
+        let pay = bytes;
+        let mut msg = Msg {
+            magic:      0u32,
+            command:    [0; 12],
+            length:     pay.len() as u32,
+            checksum:   [0; 4],
+            payload:    pay
+        };
+        msg.command.clone_from_slice(b"getb        ");
+        msg
+    }
 }

@@ -45,7 +45,7 @@ pub fn start_mining(
             .collect();
 
         let mut pending_txs: Vec<Tx> = db.query(
-            "SELECT hash, timestamp, block FROM transactions WHERE block NOT IN (SELECT id FROM blocks);",
+            "SELECT hash, timestamp, block FROM transactions WHERE block NOT IN (SELECT block_hash FROM blocks);",
             &[])
             .unwrap()
             .iter()
@@ -59,7 +59,7 @@ pub fn start_mining(
         for tx in pending_txs.iter_mut()
         {
             let inputs: Vec<Txi> = db.query(
-                "SELECT src_hash, src_idx, signature FROM tx_inputs WHERE tx = (SELECT id FROM transactions WHERE hash = $1);",
+                "SELECT src_hash, src_idx, signature FROM tx_inputs WHERE tx = $1;",
                 &[&tx.hash.as_ref()])
                 .unwrap()
                 .iter()
@@ -73,7 +73,7 @@ pub fn start_mining(
             tx.inputs = inputs;
 
             let outputs: Vec<Txo> = db.query(
-                "SELECT amount, address FROM tx_outputs WHERE tx = (SELECT id FROM transactions WHERE hash = $1);",
+                "SELECT amount, address FROM tx_outputs WHERE tx = $1;",
                 &[&tx.hash.as_ref()])
                 .unwrap()
                 .iter()
@@ -173,7 +173,7 @@ pub fn start_mining(
         for tx in next_block.txs.iter()
         {
             db.execute(
-                "UPDATE transactions SET block = (SELECT id FROM blocks WHERE block_hash = $1) WHERE hash = $2",
+                "UPDATE transactions SET block = $1 WHERE hash = $2",
                 &[&next_block.block_hash.as_ref(), &tx.hash.as_ref()])
                 .unwrap();
         }
