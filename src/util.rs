@@ -1,5 +1,3 @@
-
-
 pub const NBYTES_U64: usize = 8;
 pub const NBYTES_U32: usize = 4;
 

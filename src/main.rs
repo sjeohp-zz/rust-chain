@@ -6,6 +6,7 @@ pub mod peer;
 mod util;
 mod network;
 mod mining;
+mod crypto;
 mod tests;
 
 use transaction::*;

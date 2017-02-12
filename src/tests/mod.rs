@@ -6,3 +6,6 @@ mod block_tests;
 
 #[cfg(test)]
 mod network_tests;
+
+#[cfg(test)]
+mod crypto_tests;

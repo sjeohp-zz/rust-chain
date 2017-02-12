@@ -1,16 +1,12 @@
-extern crate ring;
-extern crate untrusted;
 extern crate byteorder;
-
-use self::ring::{digest};
-
 use self::byteorder::{ByteOrder, LittleEndian};
 
 use util::{NBYTES_U64, NBYTES_U32};
 
 use std::mem::size_of;
 
-use wallet::*;
+use wallet;
+use crypto;
 
 pub struct Txi
 {
@@ -125,19 +121,6 @@ impl Clone for Tx
     }
 }
 
-// impl PartialEq for Tx
-// {
-//     fn eq(&self, other: &Tx) -> bool
-//     {
-//         let mut inputs_eq = true;
-//         let mut outputs_eq = true;
-//         for i in 0..self.inputs.len() { inputs_eq = self.inputs[i] == other.inputs[i]; }
-//         for i in 0..self.outputs.len() { outputs_eq = self.outputs[i] == other.outputs[i]; }
-//
-//         self.hash == other.hash && self.timestamp == other.timestamp && inputs_eq && outputs_eq
-//     }
-// }
-
 impl Tx
 {
     pub fn new_with_hash(
@@ -196,7 +179,7 @@ impl Tx
 
     fn sign_inputs(&mut self)
     {
-        let signature = signature(&self.signable_vec());
+        let signature = wallet::get_signature(&self.signable_vec());
         for txi in &mut self.inputs
         {
             txi.signature.clone_from_slice(&signature);
@@ -232,20 +215,16 @@ impl Tx
 
     fn hash_contents(&mut self)
     {
-        let buf = self.hashable_vec();
-        self.hash.clone_from_slice(&digest::digest(&digest::SHA256, &buf).as_ref().to_vec());
+        let buf = &self.hashable_vec();
+        self.hash.clone_from_slice(&crypto::digest_sha256(buf));
     }
 
     pub fn verify(&mut self) -> bool
     {
-        let mut public_key: [u8; 32] = [0; 32];
-        let mut private_key: [u8; 32] = [0; 32];
-        get_or_gen_wallet(&mut public_key, &mut private_key);
-
         let mut valid = true;
         for txi in &mut self.inputs.iter()
         {
-            if !verify(&self.signable_vec(), &txi.signature, &public_key) { valid = false; }
+            valid = wallet::verify_signature(&self.signable_vec(), &txi.signature);
         }
         return valid
     }
