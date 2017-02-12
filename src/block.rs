@@ -73,17 +73,28 @@ impl Block
 
     pub fn from_slice(bytes: &[u8]) -> Block
     {
-        let txs_hash = &bytes[..32];
+        let txs_hash_len = 32;
+        let ntxs_len = 4;
+        let tx_len_len = 4;
+        let parent_hash_len = 32;
+        let target_len = 32;
+        let timestamp_len = 8;
+        let nonce_len = 8;
+        let block_hash_len = 32;
 
-        let mut idx: usize = 32;
-        let ntxs = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize);
-        idx += 4;
+        let mut idx: usize = 0;
+
+        let txs_hash = &bytes[..txs_hash_len];
+        idx += txs_hash_len;
+
+        let ntxs = LittleEndian::read_u32(&bytes[idx..idx+ntxs_len]) as usize;
+        idx += ntxs_len;
 
         let mut txs = vec![];
-        for i in 0..ntxs
+        for _ in 0..ntxs
         {
-            let tx_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize);
-            idx += 4;
+            let tx_len = LittleEndian::read_u32(&bytes[idx..idx+tx_len_len]) as usize;
+            idx += tx_len_len;
 
             let tx = Tx::from_slice(&bytes[idx..idx+tx_len]);
             idx += tx_len;
@@ -91,16 +102,15 @@ impl Block
             txs.push(tx);
         }
 
-        let parent_hash = &bytes[idx..idx+32];
-        idx += 32;
-        let target = &bytes[idx..idx+32];
-        idx += 32;
-        let timestamp = LittleEndian::read_i64(&bytes[idx..idx+8]);
-        idx += 8;
-        let nonce = LittleEndian::read_i64(&bytes[idx..idx+8]);
-        idx += 8;
-        let block_hash = &bytes[idx..idx+32];
-        idx += 32;
+        let parent_hash = &bytes[idx..idx+parent_hash_len];
+        idx += parent_hash_len;
+        let target = &bytes[idx..idx+target_len];
+        idx += target_len;
+        let timestamp = LittleEndian::read_i64(&bytes[idx..idx+timestamp_len]);
+        idx += timestamp_len;
+        let nonce = LittleEndian::read_i64(&bytes[idx..idx+nonce_len]);
+        idx += nonce_len;
+        let block_hash = &bytes[idx..idx+block_hash_len];
 
         Block::new(
             txs_hash,
@@ -124,7 +134,7 @@ impl Block
         for tx in self.txs.iter()
         {
             let tx_vec = tx.to_vec();
-            let mut tx_len = [0; 4];
+            let tx_len = [0; 4];
             LittleEndian::write_u32(&mut ntxs_buf, tx_vec.len() as u32);
             array.extend_from_slice(&tx_len);
             array.extend_from_slice(&tx_vec);

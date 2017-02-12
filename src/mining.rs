@@ -1,12 +1,11 @@
 extern crate mio;
-use self::mio::channel::{channel, Sender, Receiver};
+use self::mio::channel::{Sender, Receiver};
 
 extern crate postgres;
 use self::postgres::{Connection, TlsMode};
-use self::postgres::rows::RowIndex;
 
 extern crate rand;
-use self::rand::{thread_rng, Rng};
+use self::rand::{Rng};
 
 extern crate num;
 use self::num::bigint::{BigUint, ToBigUint};
@@ -15,7 +14,7 @@ use transaction::*;
 use block::*;
 use util::*;
 
-const target_freq: i64 = 10;
+const TARGET_FREQ: i64 = 10;
 
 pub fn start_mining(
     transaction_rcv_from_network: Receiver<Tx>,
@@ -27,7 +26,7 @@ pub fn start_mining(
 
     'outer: loop
     {
-        let mut blockchain: Vec<Block> = db.query(
+        let blockchain: Vec<Block> = db.query(
             "SELECT txs_hash, parent_hash, target, timestamp, nonce, block_hash FROM blocks ORDER BY timestamp ASC;",
             &[])
             .unwrap()
@@ -117,7 +116,7 @@ pub fn start_mining(
 
             if dt > 0
             {
-                let newtarget = sumtarget * dt.to_biguint().unwrap() / target_freq.to_biguint().unwrap();
+                let newtarget = sumtarget * dt.to_biguint().unwrap() / TARGET_FREQ.to_biguint().unwrap();
                 let bytes = newtarget.to_bytes_be();
                 target[32-bytes.len()..].clone_from_slice(&bytes);
             }
@@ -145,14 +144,14 @@ pub fn start_mining(
         {
             match transaction_rcv_from_network.try_recv()
             {
-                Ok(tx) => {
+                Ok(_) => {
                     continue 'outer;
                 }
                 Err(_) => {}
             }
             match block_rcv_from_network.try_recv()
             {
-                Ok(block) => {
+                Ok(_) => {
                     continue 'outer;
                 }
                 Err(_) => {}
@@ -179,6 +178,6 @@ pub fn start_mining(
         }
         db.execute("COMMIT WORK;", &[]).unwrap();
 
-        block_snd_to_network.send(next_block);
+        let _ = block_snd_to_network.send(next_block);
     }
 }

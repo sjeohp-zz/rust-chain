@@ -12,12 +12,38 @@ use std::mem::size_of;
 
 use wallet::*;
 
-// #[derive(Clone, Debug, PartialEq)]
 pub struct Txi
 {
     pub src_hash:   [u8; 32],
     pub src_idx:    i64,
     pub signature:  [u8; 64],
+}
+
+impl Clone for Txi
+{
+    #[inline]
+    fn clone(&self) -> Txi
+    {
+        let mut txi = Txi {
+            src_hash: [0; 32],
+            src_idx: self.src_idx,
+            signature: [0; 64]
+        };
+        txi.src_hash.clone_from_slice(&self.src_hash);
+        txi.signature.clone_from_slice(&self.signature);
+        txi
+    }
+}
+
+impl PartialEq for Txi
+{
+    fn eq(&self, other: &Txi) -> bool
+    {
+        let mut sigeq = true;
+        for i in 0..64 { sigeq = self.signature[i] == other.signature[i]; }
+
+        self.src_hash == other.src_hash && self.src_idx == other.src_idx && sigeq
+    }
 }
 
 impl Txi
@@ -27,22 +53,36 @@ impl Txi
         src_idx: i64,
         signature: &[u8]) -> Txi
     {
-        let mut txi = Txi {
+        let mut clo = Txi {
             src_hash: [0; 32],
             src_idx: src_idx,
             signature: [0; 64]
         };
-        txi.src_hash.clone_from_slice(&src_hash);
-        txi.signature.clone_from_slice(&signature);
-        txi
+        clo.src_hash.clone_from_slice(&src_hash);
+        clo.signature.clone_from_slice(&signature);
+        clo
     }
 }
 
-// #[derive(Clone, Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct Txo
 {
     pub amount:     i64,
     pub address:    [u8; 32],
+}
+
+impl Clone for Txo
+{
+    #[inline]
+    fn clone(&self) -> Txo
+    {
+        let mut clo = Txo {
+            amount: self.amount,
+            address: [0; 32]
+        };
+        clo.address.clone_from_slice(&self.address);
+        clo
+    }
 }
 
 impl Txo
@@ -60,7 +100,7 @@ impl Txo
     }
 }
 
-// #[derive(Clone, Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct Tx
 {
     pub hash:       [u8; 32],
@@ -68,6 +108,35 @@ pub struct Tx
     pub inputs:     Vec<Txi>,
     pub outputs:    Vec<Txo>,
 }
+
+impl Clone for Tx
+{
+    #[inline]
+    fn clone(&self) -> Tx
+    {
+        let mut clo = Tx {
+            hash: [0; 32],
+            timestamp: self.timestamp,
+            inputs: self.inputs.clone(),
+            outputs: self.outputs.clone(),
+        };
+        clo.hash.clone_from_slice(&self.hash);
+        clo
+    }
+}
+
+// impl PartialEq for Tx
+// {
+//     fn eq(&self, other: &Tx) -> bool
+//     {
+//         let mut inputs_eq = true;
+//         let mut outputs_eq = true;
+//         for i in 0..self.inputs.len() { inputs_eq = self.inputs[i] == other.inputs[i]; }
+//         for i in 0..self.outputs.len() { outputs_eq = self.outputs[i] == other.outputs[i]; }
+//
+//         self.hash == other.hash && self.timestamp == other.timestamp && inputs_eq && outputs_eq
+//     }
+// }
 
 impl Tx
 {

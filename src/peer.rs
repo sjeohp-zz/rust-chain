@@ -1,5 +1,4 @@
 extern crate mio;
-use self::mio::tcp::{TcpListener, TcpStream};
 use std::net;
 
 #[derive(Debug)]

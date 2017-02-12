@@ -4,12 +4,10 @@ extern crate rand;
 
 use self::byteorder::{ByteOrder, LittleEndian};
 
-use util::{NBYTES_U64, NBYTES_U32};
+use util::{NBYTES_U32};
 
-use self::mio::*;
-use self::mio::channel::{channel, Receiver};
-use self::mio::tcp::{TcpListener, TcpStream};
-use std::io::{Error, Read, Write};
+use self::mio::tcp::{TcpStream};
+use std::io::{Error, Read};
 
 use peer::*;
 
@@ -104,7 +102,7 @@ impl Msg
 
     pub fn new_add_peer(addr: &str, port: &str) -> Msg
     {
-        let mut pay = addr.to_string() + ":" + port;
+        let pay = addr.to_string() + ":" + port;
         let mut msg = Msg {
             magic:      0u32,
             command:    [0; 12],
@@ -118,7 +116,7 @@ impl Msg
 
     pub fn new_remove_peer(addr: &str, port: &str) -> Msg
     {
-        let mut pay = addr.to_string() + ":" + port;
+        let pay = addr.to_string() + ":" + port;
         let mut msg = Msg {
             magic:      0u32,
             command:    [0; 12],
@@ -132,7 +130,7 @@ impl Msg
 
     pub fn new_list_peers(addr: &str, port: &str) -> Msg
     {
-        let mut pay = addr.to_string() + ":" + port;
+        let pay = addr.to_string() + ":" + port;
         let mut msg = Msg {
             magic:      0u32,
             command:    [0; 12],

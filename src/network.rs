@@ -4,12 +4,12 @@ extern crate postgres;
 extern crate byteorder;
 extern crate rand;
 
-use self::byteorder::{ByteOrder, LittleEndian};
+// use self::byteorder::{ByteOrder, LittleEndian};
 
-use util::{NBYTES_U64, NBYTES_U32};
+// use util::{NBYTES_U64, NBYTES_U32};
 
 use self::mio::*;
-use self::mio::channel::{channel, Sender, Receiver};
+use self::mio::channel::{Sender, Receiver};
 use self::mio::tcp::{TcpListener, TcpStream};
 
 use self::chrono::*;
@@ -17,13 +17,12 @@ use self::chrono::*;
 use self::postgres::{Connection, TlsMode};
 
 use std::collections::{HashMap};
-use std::time;
-use std::io::{Read, Write};
+// use std::time;
+use std::io::{Write};
 use std::net;
 
-use std::thread;
-
-use self::rand::{thread_rng, Rng};
+// use std::thread;
+// use self::rand::{thread_rng, Rng};
 
 use transaction::*;
 use peer::*;
@@ -180,7 +179,7 @@ pub fn bootstrap(
                     let mut addp = Msg::new_add_peer(server_addr, server_port).to_vec();
                     let mut lisp = Msg::new_list_peers(server_addr, server_port).to_vec();
 
-                    let mut tx0 = Tx::new(
+                    let tx0 = Tx::new(
                         vec![
                             Txi {
                                 src_hash:   [1; 32],
@@ -210,7 +209,7 @@ pub fn bootstrap(
                             println!("Error writing to stream: {}", e);
                         }
                     }
-                    stream.flush();
+                    let _ = stream.flush();
 
                     peers.push(
                         Peer {
@@ -293,11 +292,6 @@ fn handle_message(
     // let stutter = time::Duration::from_millis(rng.gen_range::<u64>(0, 5000));
     // thread::sleep(stutter);
 
-    let mut mgc = [0; 4];
-    let mut cmd = [0; 4];
-    let mut len = [0; 4];
-    let mut sum = [0; 4];
-
     match clients[&token].try_clone()
     {
         Ok(mut stream) =>
@@ -346,10 +340,13 @@ fn handle_message(
                                 print!(" get blocks\n");
                             }
                             b"getb        " => {
-                                print!(" get block\n");
+                                rcv_getb(
+                                    &msg.payload,
+                                    server,
+                                    peers,
+                                    db);
                             }
                             b"addb        " => {
-                                println!("reading block msg {:#?}", &msg.to_vec());
                                 rcv_addb(
                                     &msg.payload,
                                     db,
@@ -394,7 +391,7 @@ fn handle_message(
                 }
             }
         }
-        Err(e) => { }
+        Err(_) => { }
     }
 }
 
@@ -430,7 +427,7 @@ fn add_peer(
     {
         match net::TcpStream::connect((ip.as_str(), port as u16))
         {
-            Ok(mut stream) =>
+            Ok(stream) =>
             {
                 let trans = db.transaction().unwrap();
                 trans.execute("LOCK TABLE peers IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
@@ -459,7 +456,7 @@ fn add_peer(
                     }
                 }
             }
-            Err(e) => {}
+            Err(_) => {}
         }
     }
 }
@@ -576,7 +573,7 @@ pub fn rcv_addt(
                     .unwrap();
             }
 
-            transaction_snd_to_mine.send(tx);
+            let _ = transaction_snd_to_mine.send(tx);
         }
         db.execute("COMMIT WORK;", &[]).unwrap();
     }
@@ -643,7 +640,7 @@ pub fn rcv_addb(
                         .unwrap();
                 }
             }
-            block_snd_to_mine.send(block);
+            let _ = block_snd_to_mine.send(block);
         }
         db.execute("COMMIT WORK;", &[]).unwrap();
     }
@@ -731,6 +728,6 @@ pub fn publish_block(
                 println!("Error writing to stream: {}", e);
             }
         }
-        socket.flush();
+        let _ = socket.flush();
     }
 }
