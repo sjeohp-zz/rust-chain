@@ -63,7 +63,7 @@ pub fn start_mining(
                 .unwrap()
                 .iter()
                 .map(|row|
-                    Txi::new(
+                    Txi::from_stored(
                         &(row.get::<usize, Vec<u8>>(0)),
                         row.get(1),
                         &(row.get::<usize, Vec<u8>>(2))

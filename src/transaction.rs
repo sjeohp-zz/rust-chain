@@ -46,6 +46,19 @@ impl Txi
 {
     pub fn new(
         src_hash: &[u8],
+        src_idx: i64) -> Txi
+    {
+        let mut clo = Txi {
+            src_hash: [0; 32],
+            src_idx: src_idx,
+            signature: [0; 64]
+        };
+        clo.src_hash.clone_from_slice(&src_hash);
+        clo
+    }
+
+    pub fn from_stored(
+        src_hash: &[u8],
         src_idx: i64,
         signature: &[u8]) -> Txi
     {

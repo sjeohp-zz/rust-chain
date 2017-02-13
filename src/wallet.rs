@@ -9,7 +9,7 @@ static WALLET_PATH: &'static str = ".wallet";
 static PUBLIC_KEY_PATH: &'static str = ".wallet/id_ed25519.pub";
 static PRIVATE_KEY_PATH: &'static str = ".wallet/id_ed25519";
 
-pub fn get_or_gen_wallet(mut public_key: &mut [u8; 32], mut private_key: &mut [u8; 32])
+pub fn get_keypair(mut public_key: &mut [u8; 32], mut private_key: &mut [u8; 32])
 {
     match fs::metadata(WALLET_PATH)
     {
@@ -30,11 +30,27 @@ pub fn get_or_gen_wallet(mut public_key: &mut [u8; 32], mut private_key: &mut [u
     }
 }
 
+pub fn get_public_key() -> Vec<u8>
+{
+    let mut public_key: [u8; 32] = [0; 32];
+    let mut private_key: [u8; 32] = [0; 32];
+    get_keypair(&mut public_key, &mut private_key);
+    public_key.to_vec()
+}
+
+pub fn get_private_key() -> Vec<u8>
+{
+    let mut public_key: [u8; 32] = [0; 32];
+    let mut private_key: [u8; 32] = [0; 32];
+    get_keypair(&mut public_key, &mut private_key);
+    private_key.to_vec()
+}
+
 pub fn get_signature(bytes: &[u8]) -> Vec<u8>
 {
     let mut public_key: [u8; 32] = [0; 32];
     let mut private_key: [u8; 32] = [0; 32];
-    get_or_gen_wallet(&mut public_key, &mut private_key);
+    get_keypair(&mut public_key, &mut private_key);
 
     crypto::sign_ed25519(bytes, &public_key, &private_key)
 }
@@ -43,7 +59,7 @@ pub fn verify_signature(bytes: &[u8], sig: &[u8]) -> bool
 {
     let mut public_key: [u8; 32] = [0; 32];
     let mut private_key: [u8; 32] = [0; 32];
-    get_or_gen_wallet(&mut public_key, &mut private_key);
+    get_keypair(&mut public_key, &mut private_key);
 
     crypto::verify_ed25519(bytes, sig, &public_key)
 }
