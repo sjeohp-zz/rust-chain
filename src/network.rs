@@ -14,7 +14,7 @@ use self::mio::tcp::{TcpListener, TcpStream};
 
 use self::chrono::*;
 
-use self::postgres::{Connection, TlsMode};
+use self::postgres::{Connection};
 
 use std::collections::{HashMap};
 // use std::time;
@@ -24,6 +24,7 @@ use std::net;
 // use std::thread;
 // use self::rand::{thread_rng, Rng};
 
+use database;
 use transaction::*;
 use peer::*;
 use message::*;
@@ -39,12 +40,11 @@ const SERVER_DEFAULT_PORT: &'static str = "9001";
 pub fn start_server(
     port: Option<String>,
     quit_rcv: Receiver<()>,
-    transaction_snd_to_mine: Sender<Tx>,
+    transaction_snd_to_mine: Sender<Transaction>,
     block_snd_to_mine: Sender<Block>,
     block_rcv_from_mine: Receiver<Block>)
 {
-    let db_url = "postgresql://chain@localhost:5432/chaindb";
-    let db = Connection::connect(db_url, TlsMode::None).expect("Unable to connect to database");
+    let db = database::conn();
 
     let poll = Poll::new().expect("Failed to create poll");
 
@@ -84,28 +84,13 @@ pub fn start_server(
 
     println!("Listening on {}", addr);
 
-    let peer_history = db.query(
-        "SELECT id, ip, port, timestamp FROM peers ORDER BY timestamp DESC;",
-        &[])
-        .unwrap()
-        .iter()
-        .map(|row| Peer {
-            id: row.get(0),
-            addr: row.get(1),
-            port: row.get(2),
-            timestamp: row.get(3),
-            socket: None
-        })
-        .collect();
+    let peer_history = database::peers(&db);
 
     let mut peers = bootstrap(LOCALHOST, &port, peer_history);
 
     for peer in &peers
     {
-        db.execute(
-            "UPDATE peers SET timestamp = $1 WHERE id = $2",
-            &[&peer.timestamp, &peer.id])
-            .unwrap();
+        database::upsert_peer(&peer, &db);
     }
 
     'event_loop: loop
@@ -168,10 +153,10 @@ pub fn bootstrap(
     {
         if peer.port.to_string() != server_port
         {
-            let addr = peer.addr.clone() + ":" + &peer.port.to_string();
+            let addr = peer.ip.clone() + ":" + &peer.port.to_string();
             println!("Connecting to peer at {}", addr);
 
-            match net::TcpStream::connect((peer.addr.as_str(), peer.port as u16))
+            match net::TcpStream::connect((peer.ip.as_str(), peer.port as u16))
             {
                 Ok(mut stream) => {
                     println!("Connected to {:?}", stream.peer_addr().unwrap());
@@ -179,16 +164,16 @@ pub fn bootstrap(
                     let mut addp = Msg::new_add_peer(server_addr, server_port).to_vec();
                     let mut lisp = Msg::new_list_peers(server_addr, server_port).to_vec();
 
-                    let tx0 = Tx::new(
+                    let tx0 = Transaction::new(
                         vec![
-                            Txi {
+                            TxInput {
                                 src_hash:   [1; 32],
                                 src_idx:    2,
                                 signature:  [3; 64]
                             }
                         ],
                         vec![
-                            Txo {
+                            TxOutput {
                                 amount: 4,
                                 address: [5; 32]
                             }
@@ -212,13 +197,11 @@ pub fn bootstrap(
                     let _ = stream.flush();
 
                     peers.push(
-                        Peer {
-                            id: peer.id,
-                            addr: peer.addr,
-                            port: peer.port,
-                            timestamp: UTC::now().timestamp(),
-                            socket: Some(stream)
-                        });
+                        Peer::new(
+                            peer.ip,
+                            peer.port,
+                            UTC::now().timestamp(),
+                            Some(stream)));
                 }
                 Err(e) => {
                     println!("Error connecting to host: {}", e);
@@ -285,7 +268,7 @@ fn handle_message(
     clients: &mut HashMap<Token, TcpStream>,
     peers: &mut Vec<Peer>,
     db: &Connection,
-    transaction_snd_to_mine: &Sender<Tx>,
+    transaction_snd_to_mine: &Sender<Transaction>,
     block_snd_to_mine: &Sender<Block>)
 {
     // let mut rng = rand::thread_rng();
@@ -429,31 +412,10 @@ fn add_peer(
         {
             Ok(stream) =>
             {
-                let trans = db.transaction().unwrap();
-                trans.execute("LOCK TABLE peers IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-                trans.execute(
-                    "WITH upsert AS
-                    (UPDATE peers SET timestamp = $3 WHERE ip = $1 AND port = $2 RETURNING *)
-                    INSERT INTO peers (ip, port, timestamp) SELECT $1, $2, $3
-                    WHERE NOT EXISTS (SELECT * FROM upsert);",
-                    &[&ip, &port, &timestamp])
-                    .unwrap();
-                trans.commit().unwrap();
-                match peers.iter().find(|p| p.addr == ip && p.port == port)
+                let peer = Peer::new(ip, port, timestamp, Some(stream));
+                if database::upsert_peer(&peer, db).is_ok()
                 {
-                    Some(_) => {}
-                    None =>
-                    {
-                        let peer = Peer {
-                            id: 0,
-                            addr: ip,
-                            port: port,
-                            timestamp: timestamp,
-                            socket: Some(stream)
-                        };
-
-                        peers.push(peer);
-                    }
+                    peers.push(peer);
                 }
             }
             Err(_) => {}
@@ -473,7 +435,7 @@ fn rcv_remp(
         let ip = String::from_utf8(cmpts[0].to_vec()).unwrap();
         let port = String::from_utf8(cmpts[1].to_vec()).unwrap().parse::<i32>().unwrap();
 
-        match peers.iter_mut().position(|p| p.addr == ip && p.port == port)
+        match peers.iter_mut().position(|p| p.ip == ip && p.port == port)
         {
             Some(peer_idx) =>
             {
@@ -496,7 +458,7 @@ fn rcv_lisp(
         let ip = String::from_utf8(cmpts[0].to_vec()).unwrap();
         let port = String::from_utf8(cmpts[1].to_vec()).unwrap().parse::<i32>().unwrap();
 
-        match peers.iter_mut().position(|p| p.addr == ip && p.port == port)
+        match peers.iter_mut().position(|p| p.ip == ip && p.port == port)
         {
             Some(peer_idx) =>
             {
@@ -540,42 +502,17 @@ fn rcv_resp_lisp(
 pub fn rcv_addt(
     payload: &[u8],
     db: &Connection,
-    transaction_snd_to_mine: &Sender<Tx>)
+    transaction_snd_to_mine: &Sender<Transaction>)
 {
     println!("rcv_addt");
 
-    let mut tx = Tx::from_slice(payload);
+    let mut tx = Transaction::from_slice(payload);
     if tx.verify()
     {
-        db.execute("BEGIN WORK;", &[]).unwrap();
-        db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-        if db.execute(
-            "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
-            &[&tx.hash.as_ref()])
-            .unwrap() != 1
+        if database::insert_transaction(&tx, db).is_ok()
         {
-            db.execute(
-                "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
-                &[&tx.hash.as_ref(), &tx.timestamp])
-                .unwrap();
-            for txi in tx.inputs.iter()
-            {
-                db.execute(
-                    "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, $4",
-                    &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
-                    .unwrap();
-            }
-            for txo in tx.outputs.iter()
-            {
-                db.execute(
-                    "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, $3",
-                    &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
-                    .unwrap();
-            }
-
             let _ = transaction_snd_to_mine.send(tx);
         }
-        db.execute("COMMIT WORK;", &[]).unwrap();
     }
     else
     {
@@ -592,57 +529,10 @@ pub fn rcv_addb(
     let mut block = Block::from_slice(payload);
     if block.verify()
     {
-        db.execute("BEGIN WORK;", &[]).unwrap();
-        db.execute("LOCK TABLE blocks IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-
-        if db.execute(
-            "SELECT EXISTS (SELECT 1 FROM blocks WHERE block_hash = $1)",
-            &[&block.block_hash.as_ref()])
-            .unwrap() != 1
+        if database::insert_block(&block, db).is_ok()
         {
-            db.execute(
-                "INSERT INTO blocks (txs_hash, parent_hash, target, timestamp, nonce, block_hash) SELECT $1, $2, $3, $4, $5, $6",
-                &[&block.txs_hash.as_ref(), &block.parent_hash.as_ref(), &block.target.as_ref(), &block.timestamp, &block.nonce, &block.block_hash.as_ref()])
-                .unwrap();
-
-            db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-            for tx in block.txs.iter()
-            {
-                if db.execute(
-                    "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
-                    &[&tx.hash.as_ref()])
-                    .unwrap() != 1
-                {
-                    db.execute(
-                        "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
-                        &[&tx.hash.as_ref(), &tx.timestamp])
-                        .unwrap();
-                    for txi in tx.inputs.iter()
-                    {
-                        db.execute(
-                            "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, (SELECT id FROM transactions WHERE hash = $4)",
-                            &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
-                            .unwrap();
-                    }
-                    for txo in tx.outputs.iter()
-                    {
-                        db.execute(
-                            "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, (SELECT id FROM transactions WHERE hash = $3)",
-                            &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
-                            .unwrap();
-                    }
-                }
-                else
-                {
-                    db.execute(
-                        "UPDATE transactions SET block = (SELECT id FROM blocks WHERE block_hash = $1) WHERE hash = $2",
-                        &[&block.block_hash.as_ref(), &tx.hash.as_ref()])
-                        .unwrap();
-                }
-            }
             let _ = block_snd_to_mine.send(block);
         }
-        db.execute("COMMIT WORK;", &[]).unwrap();
     }
     else
     {
@@ -669,26 +559,9 @@ pub fn rcv_getb(
 
             add_peer(ip.clone(), port, server, peers, db);
 
-            let peer_idx = peers.iter_mut().position(|p| p.addr == ip && p.port == port).unwrap();
+            let peer_idx = peers.iter_mut().position(|p| p.ip == ip && p.port == port).unwrap();
 
-            let filtered_blocks: Vec<Block> = db.query(
-                "SELECT txs_hash, parent_hash, target, timestamp, nonce, block_hash FROM blocks WHERE block_hash = $1;",
-                &[&hash.as_ref()])
-                .unwrap()
-                .iter()
-                .map(|row|
-                    Block::new(
-                        &(row.get::<usize, Vec<u8>>(0)),
-                        vec![],
-                        &(row.get::<usize, Vec<u8>>(1)),
-                        &(row.get::<usize, Vec<u8>>(2)),
-                        row.get(3),
-                        row.get(4),
-                        &(row.get::<usize, Vec<u8>>(5))
-                    ))
-                .collect();
-
-            match filtered_blocks.first()
+            match database::block(&hash, db)
             {
                 Some(block) => {
                     let msg = Msg::new_add_block(block.to_vec()).to_vec();

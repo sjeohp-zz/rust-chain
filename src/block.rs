@@ -12,9 +12,10 @@ use util::{NBYTES_U64};
 
 use self::chrono::*;
 
+#[derive(PartialEq, Clone)]
 pub struct Block
 {
-    pub txs:            Vec<Tx>,
+    pub txs:            Vec<Transaction>,
     pub txs_hash:       [u8; 32],
     pub parent_hash:    [u8; 32],
     pub target:         [u8; 32],
@@ -27,7 +28,7 @@ impl Block
 {
     pub fn new(
         txs_hash: &[u8],
-        txs: Vec<Tx>,
+        txs: Vec<Transaction>,
         parent_hash: &[u8],
         target: &[u8],
         timestamp: i64,
@@ -51,7 +52,7 @@ impl Block
     }
 
     pub fn new_minable(
-        txs: Vec<Tx>,
+        txs: Vec<Transaction>,
         parent_hash: &[u8],
         target: &[u8],
         nonce: i64) -> Block
@@ -96,7 +97,7 @@ impl Block
             let tx_len = LittleEndian::read_u32(&bytes[idx..idx+tx_len_len]) as usize;
             idx += tx_len_len;
 
-            let tx = Tx::from_slice(&bytes[idx..idx+tx_len]);
+            let tx = Transaction::from_slice(&bytes[idx..idx+tx_len]);
             idx += tx_len;
 
             txs.push(tx);
@@ -168,7 +169,7 @@ impl Block
     }
 }
 
-pub fn txs_hash(txs: &[Tx]) -> Vec<u8>
+pub fn txs_hash(txs: &[Transaction]) -> Vec<u8>
 {
     let txs_hash_bytes: Vec<u8> = txs.iter().flat_map(|x| x.hash.to_vec()).collect();
     digest::digest(&digest::SHA256, &txs_hash_bytes).as_ref().to_vec()

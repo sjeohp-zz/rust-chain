@@ -147,7 +147,7 @@ impl Msg
         let mut pay = "lisp        ".to_owned();
         for peer in peers.iter()
         {
-            pay.push_str(&peer.addr.clone());
+            pay.push_str(&peer.ip.clone());
             pay.push_str(":");
             pay.push_str(&peer.port.clone().to_string());
             pay.push_str(",");

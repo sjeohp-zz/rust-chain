@@ -3,11 +3,11 @@
 psql -U postgres -c "SELECT 1 FROM pg_user WHERE usename = 'chain'" | grep -q 1 || psql -U postgres -c "CREATE USER chain"
 
 psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname = 'chaindb'" | grep -q 1 || psql -U postgres -c "CREATE DATABASE chaindb OWNER chain"
-psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'peers'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE peers (id serial PRIMARY KEY, timestamp bigint, ip character varying(45), port integer)"
+psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'peers'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE peers (timestamp bigint, ip character varying(45), port integer, PRIMARY KEY(ip, port))"
 psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'blocks'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE blocks (txs_hash bytea, parent_hash bytea, target bytea, timestamp bigint, nonce bigint, block_hash bytea PRIMARY KEY)"
 psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'transactions'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE transactions (hash bytea PRIMARY KEY, timestamp bigint, block bytea references blocks(block_hash))"
 psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_inputs'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE tx_inputs (id bigserial PRIMARY KEY, src_hash bytea, src_idx bigint, signature bytea, tx bytea references transactions(hash))"
-psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_outputs'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE tx_outputs (id bigserial PRIMARY KEY, amount bigint, address bytea, tx bytea references transactions(hash))"
+psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_outputs'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE tx_outputs (id bigserial PRIMARY KEY, idx bigint, amount bigint, address bytea, tx bytea references transactions(hash))"
 psql -d chaindb -U chain -c "SELECT 1 FROM peers" | grep -q 1 || psql -d chaindb -U chain -c "INSERT INTO peers (ip, port, timestamp) VALUES ('127.0.0.1', 9001, 0)"
 
 # psql -d chaindb -U chain -c "GRANT ALL ON peers TO chain"

@@ -5,10 +5,10 @@ use util::*;
 #[test]
 fn test_block()
 {
-    let tx = Tx::new(
+    let tx = Transaction::new(
         vec![],
         vec![
-            Txo {
+            TxOutput {
                 amount: 55555555,
                 address: [1; 32]
             }

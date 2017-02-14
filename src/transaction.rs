@@ -8,19 +8,19 @@ use std::mem::size_of;
 use wallet;
 use crypto;
 
-pub struct Txi
+pub struct TxInput
 {
     pub src_hash:   [u8; 32],
     pub src_idx:    i64,
     pub signature:  [u8; 64],
 }
 
-impl Clone for Txi
+impl Clone for TxInput
 {
     #[inline]
-    fn clone(&self) -> Txi
+    fn clone(&self) -> TxInput
     {
-        let mut txi = Txi {
+        let mut txi = TxInput {
             src_hash: [0; 32],
             src_idx: self.src_idx,
             signature: [0; 64]
@@ -31,9 +31,9 @@ impl Clone for Txi
     }
 }
 
-impl PartialEq for Txi
+impl PartialEq for TxInput
 {
-    fn eq(&self, other: &Txi) -> bool
+    fn eq(&self, other: &TxInput) -> bool
     {
         let mut sigeq = true;
         for i in 0..64 { sigeq = self.signature[i] == other.signature[i]; }
@@ -42,13 +42,13 @@ impl PartialEq for Txi
     }
 }
 
-impl Txi
+impl TxInput
 {
     pub fn new(
         src_hash: &[u8],
-        src_idx: i64) -> Txi
+        src_idx: i64) -> TxInput
     {
-        let mut clo = Txi {
+        let mut clo = TxInput {
             src_hash: [0; 32],
             src_idx: src_idx,
             signature: [0; 64]
@@ -60,9 +60,9 @@ impl Txi
     pub fn from_stored(
         src_hash: &[u8],
         src_idx: i64,
-        signature: &[u8]) -> Txi
+        signature: &[u8]) -> TxInput
     {
-        let mut clo = Txi {
+        let mut clo = TxInput {
             src_hash: [0; 32],
             src_idx: src_idx,
             signature: [0; 64]
@@ -74,18 +74,18 @@ impl Txi
 }
 
 #[derive(PartialEq)]
-pub struct Txo
+pub struct TxOutput
 {
     pub amount:     i64,
     pub address:    [u8; 32],
 }
 
-impl Clone for Txo
+impl Clone for TxOutput
 {
     #[inline]
-    fn clone(&self) -> Txo
+    fn clone(&self) -> TxOutput
     {
-        let mut clo = Txo {
+        let mut clo = TxOutput {
             amount: self.amount,
             address: [0; 32]
         };
@@ -94,13 +94,13 @@ impl Clone for Txo
     }
 }
 
-impl Txo
+impl TxOutput
 {
     pub fn new(
         amount: i64,
-        address: &[u8]) -> Txo
+        address: &[u8]) -> TxOutput
     {
-        let mut txo = Txo {
+        let mut txo = TxOutput {
             amount: amount,
             address: [0; 32]
         };
@@ -110,20 +110,20 @@ impl Txo
 }
 
 #[derive(PartialEq)]
-pub struct Tx
+pub struct Transaction
 {
     pub hash:       [u8; 32],
     pub timestamp:  i64,
-    pub inputs:     Vec<Txi>,
-    pub outputs:    Vec<Txo>,
+    pub inputs:     Vec<TxInput>,
+    pub outputs:    Vec<TxOutput>,
 }
 
-impl Clone for Tx
+impl Clone for Transaction
 {
     #[inline]
-    fn clone(&self) -> Tx
+    fn clone(&self) -> Transaction
     {
-        let mut clo = Tx {
+        let mut clo = Transaction {
             hash: [0; 32],
             timestamp: self.timestamp,
             inputs: self.inputs.clone(),
@@ -134,13 +134,13 @@ impl Clone for Tx
     }
 }
 
-impl Tx
+impl Transaction
 {
     pub fn new_with_hash(
         hash: &[u8],
-        timestamp: i64) -> Tx
+        timestamp: i64) -> Transaction
     {
-        let mut tx = Tx {
+        let mut tx = Transaction {
             hash: [0; 32],
             timestamp: timestamp,
             inputs: vec![],
@@ -151,11 +151,11 @@ impl Tx
     }
 
     pub fn new(
-        inputs: Vec<Txi>,
-        outputs: Vec<Txo>,
-        timestamp: i64) -> Tx
+        inputs: Vec<TxInput>,
+        outputs: Vec<TxOutput>,
+        timestamp: i64) -> Transaction
     {
-        let mut tx = Tx {
+        let mut tx = Transaction {
             hash: [0; 32],
             timestamp: timestamp,
             inputs: inputs,
@@ -242,44 +242,44 @@ impl Tx
         return valid
     }
 
-    pub fn from_slice(bytes: &[u8]) -> Tx
+    pub fn from_slice(bytes: &[u8]) -> Transaction
     {
         let hash = &bytes[..32];
         let timestamp = LittleEndian::read_i64(&bytes[32..40]);
         let mut idx: usize = 40;
-        let inp_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<Txi>();
+        let inp_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<TxInput>();
         idx += 4;
         let input_bytes = &bytes[idx..idx+(inp_len)];
         idx += inp_len;
-        let out_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<Txo>();
+        let out_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<TxOutput>();
         idx += 4;
         let output_bytes = &bytes[idx..idx+(out_len)];
 
         let mut inputs = vec![];
-        for i in 0..(inp_len / size_of::<Txi>())
+        for i in 0..(inp_len / size_of::<TxInput>())
         {
-            let mut txi = Txi {
+            let mut txi = TxInput {
                 src_hash: [0; 32],
-                src_idx: LittleEndian::read_i64(&input_bytes[(i*size_of::<Txi>()+32)..(i*size_of::<Txi>()+40)]),
+                src_idx: LittleEndian::read_i64(&input_bytes[(i*size_of::<TxInput>()+32)..(i*size_of::<TxInput>()+40)]),
                 signature: [0; 64]
             };
-            txi.src_hash.clone_from_slice(&input_bytes[(i*size_of::<Txi>()) as usize..(i*size_of::<Txi>()+32) as usize]);
-            txi.signature.clone_from_slice(&input_bytes[(i*size_of::<Txi>()+40) as usize..(i*size_of::<Txi>()+104) as usize]);
+            txi.src_hash.clone_from_slice(&input_bytes[(i*size_of::<TxInput>()) as usize..(i*size_of::<TxInput>()+32) as usize]);
+            txi.signature.clone_from_slice(&input_bytes[(i*size_of::<TxInput>()+40) as usize..(i*size_of::<TxInput>()+104) as usize]);
             inputs.push(txi);
         }
 
         let mut outputs = vec![];
-        for i in 0..(out_len / size_of::<Txo>())
+        for i in 0..(out_len / size_of::<TxOutput>())
         {
-            let mut txo = Txo {
-                amount: LittleEndian::read_i64(&output_bytes[(i*size_of::<Txo>()) as usize..(i*size_of::<Txo>()+8) as usize]),
+            let mut txo = TxOutput {
+                amount: LittleEndian::read_i64(&output_bytes[(i*size_of::<TxOutput>()) as usize..(i*size_of::<TxOutput>()+8) as usize]),
                 address: [0; 32]
             };
-            txo.address.clone_from_slice(&output_bytes[(i*size_of::<Txo>()+8) as usize..(i*size_of::<Txo>()+40) as usize]);
+            txo.address.clone_from_slice(&output_bytes[(i*size_of::<TxOutput>()+8) as usize..(i*size_of::<TxOutput>()+40) as usize]);
             outputs.push(txo);
         }
 
-        let mut tx = Tx {
+        let mut tx = Transaction {
             inputs: inputs,
             outputs: outputs,
             timestamp: timestamp,

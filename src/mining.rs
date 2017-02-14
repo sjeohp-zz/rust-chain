@@ -13,76 +13,26 @@ use self::num::bigint::{BigUint, ToBigUint};
 use transaction::*;
 use block::*;
 use util::*;
+use database;
 
 const TARGET_FREQ: i64 = 10;
 
 pub fn start_mining(
-    transaction_rcv_from_network: Receiver<Tx>,
+    transaction_rcv_from_network: Receiver<Transaction>,
     block_rcv_from_network: Receiver<Block>,
     block_snd_to_network: Sender<Block>)
 {
-    let db_url = "postgresql://chain@localhost:5432/chaindb";
-    let db = Connection::connect(db_url, TlsMode::None).expect("Unable to connect to database");
+    let db = database::conn();
 
     'outer: loop
     {
-        let blockchain: Vec<Block> = db.query(
-            "SELECT txs_hash, parent_hash, target, timestamp, nonce, block_hash FROM blocks ORDER BY timestamp ASC;",
-            &[])
-            .unwrap()
-            .iter()
-            .map(|row|
-                Block::new(
-                    &(row.get::<usize, Vec<u8>>(0)),
-                    vec![],
-                    &(row.get::<usize, Vec<u8>>(1)),
-                    &(row.get::<usize, Vec<u8>>(2)),
-                    row.get(3),
-                    row.get(4),
-                    &(row.get::<usize, Vec<u8>>(5))
-                ))
-            .collect();
-
-        let mut pending_txs: Vec<Tx> = db.query(
-            "SELECT hash, timestamp, block FROM transactions WHERE block NOT IN (SELECT block_hash FROM blocks);",
-            &[])
-            .unwrap()
-            .iter()
-            .map(|row|
-                Tx::new_with_hash(
-                    &(row.get::<usize, Vec<u8>>(0)),
-                    row.get(1),
-                ))
-            .collect();
+        let blockchain: Vec<Block> = database::blockchain(&db);
+        let mut pending_txs: Vec<Transaction> = database::pending_txs(&db);
 
         for tx in pending_txs.iter_mut()
         {
-            let inputs: Vec<Txi> = db.query(
-                "SELECT src_hash, src_idx, signature FROM tx_inputs WHERE tx = $1;",
-                &[&tx.hash.as_ref()])
-                .unwrap()
-                .iter()
-                .map(|row|
-                    Txi::from_stored(
-                        &(row.get::<usize, Vec<u8>>(0)),
-                        row.get(1),
-                        &(row.get::<usize, Vec<u8>>(2))
-                    ))
-                .collect();
-            tx.inputs = inputs;
-
-            let outputs: Vec<Txo> = db.query(
-                "SELECT amount, address FROM tx_outputs WHERE tx = $1;",
-                &[&tx.hash.as_ref()])
-                .unwrap()
-                .iter()
-                .map(|row|
-                    Txo::new(
-                        row.get(0),
-                        &(row.get::<usize, Vec<u8>>(1))
-                    ))
-                .collect();
-            tx.outputs = outputs;
+            tx.inputs = database::tx_inputs(&tx, &db);
+            tx.outputs = database::tx_outputs(&tx, &db);
         }
 
         let mut target = [0; 32];
@@ -163,20 +113,7 @@ pub fn start_mining(
         println!("{}", to_hex_string(&next_block.target));
         println!("{}", to_hex_string(&next_block.block_hash));
 
-        db.execute("BEGIN WORK;", &[]).unwrap();
-        db.execute("LOCK TABLE blocks IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-        db.execute(
-            "INSERT INTO blocks (txs_hash, parent_hash, target, timestamp, nonce, block_hash) SELECT $1, $2, $3, $4, $5, $6",
-            &[&next_block.txs_hash.as_ref(), &next_block.parent_hash.as_ref(), &next_block.target.as_ref(), &next_block.timestamp, &next_block.nonce, &next_block.block_hash.as_ref()])
-            .unwrap();
-        for tx in next_block.txs.iter()
-        {
-            db.execute(
-                "UPDATE transactions SET block = $1 WHERE hash = $2",
-                &[&next_block.block_hash.as_ref(), &tx.hash.as_ref()])
-                .unwrap();
-        }
-        db.execute("COMMIT WORK;", &[]).unwrap();
+        database::insert_block(&next_block, &db);
 
         let _ = block_snd_to_network.send(next_block);
     }
