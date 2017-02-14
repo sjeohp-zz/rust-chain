@@ -5,8 +5,6 @@ use wallet;
 use crypto;
 use database;
 
-use std::u8::{MAX};
-
 extern crate chrono;
 use self::chrono::{UTC};
 

@@ -14,7 +14,7 @@ const DB_URL: &'static str = "postgresql://chain@localhost:5432/chaindb";
 pub enum DatabaseInsertionError
 {
     ValueExists,
-    Unknown
+    // Unknown
 }
 
 pub fn conn() -> Connection
@@ -165,44 +165,42 @@ pub fn insert_block(block: &Block, db: &Connection) -> Result<(), DatabaseInsert
             &[&block.txs_hash.as_ref(), &block.parent_hash.as_ref(), &block.target.as_ref(), &block.timestamp, &block.nonce, &block.block_hash.as_ref()])
             .unwrap();
 
+        // db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
         for tx in block.txs.iter()
         {
-            // db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
-            for tx in block.txs.iter()
+            if db.execute(
+                "SELECT 1 FROM transactions WHERE hash = $1",
+                &[&tx.hash.as_ref()])
+                .unwrap() != 1
             {
-                if db.execute(
-                    "SELECT 1 FROM transactions WHERE hash = $1",
-                    &[&tx.hash.as_ref()])
-                    .unwrap() != 1
+                // TRANSACTION DOESN'T EXIST LOCALLY, MUST HAVE RECEIVED THIS BLOCK FROM A PEER
+                db.execute(
+                    "INSERT INTO transactions (hash, timestamp, block) SELECT $1, $2, $3",
+                    &[&tx.hash.as_ref(), &tx.timestamp, &block.block_hash.as_ref()])
+                    .unwrap();
+
+                for txi in tx.inputs.iter()
                 {
-                    // TRANSACTION DOESN'T EXIST LOCALLY, MUST HAVE RECEIVED THIS BLOCK FROM A PEER
                     db.execute(
-                        "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
-                        &[&tx.hash.as_ref(), &tx.timestamp])
-                        .unwrap();
-                    for txi in tx.inputs.iter()
-                    {
-                        db.execute(
-                            "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, $4",
-                            &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
-                            .unwrap();
-                    }
-                    for (i, txo) in tx.outputs.iter().enumerate()
-                    {
-                        db.execute(
-                            "INSERT INTO tx_outputs (idx, amount, address, tx) SELECT $1, $2, $3, $4",
-                            &[&(i as i64), &txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
-                            .unwrap();
-                    }
-                }
-                else
-                {
-                    // TRANSACTION IS ALREADY STORED/PENDING; ADD IT TO THE BLOCK
-                    db.execute(
-                        "UPDATE transactions SET block = $1 WHERE hash = $2",
-                        &[&block.block_hash.as_ref(), &tx.hash.as_ref()])
+                        "INSERT INTO tx_inputs (src_hash, src_idx, signature, tx) SELECT $1, $2, $3, $4",
+                        &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
                         .unwrap();
                 }
+                for (i, txo) in tx.outputs.iter().enumerate()
+                {
+                    db.execute(
+                        "INSERT INTO tx_outputs (idx, amount, address, tx) SELECT $1, $2, $3, $4",
+                        &[&(i as i64), &txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
+                        .unwrap();
+                }
+            }
+            else
+            {
+                // TRANSACTION IS ALREADY STORED/PENDING; ADD IT TO THE BLOCK
+                db.execute(
+                    "UPDATE transactions SET block = $1 WHERE hash = $2",
+                    &[&block.block_hash.as_ref(), &tx.hash.as_ref()])
+                    .unwrap();
             }
         }
     }

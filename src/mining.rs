@@ -1,9 +1,6 @@
 extern crate mio;
 use self::mio::channel::{Sender, Receiver};
 
-extern crate postgres;
-use self::postgres::{Connection, TlsMode};
-
 extern crate rand;
 use self::rand::{Rng};
 
@@ -116,7 +113,7 @@ pub fn start_mining(
         println!("{}", to_hex_string(&next_block.target));
         println!("{}", to_hex_string(&next_block.block_hash));
 
-        database::insert_block(&next_block, &db);
+        let _ = database::insert_block(&next_block, &db);
 
         let _ = block_snd_to_network.send(next_block);
     }

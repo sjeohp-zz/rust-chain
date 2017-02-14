@@ -90,7 +90,7 @@ pub fn start_server(
 
     for peer in &peers
     {
-        database::upsert_peer(&peer, &db);
+        let _ = database::upsert_peer(&peer, &db);
     }
 
     'event_loop: loop
