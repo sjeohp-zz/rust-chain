@@ -1,7 +1,9 @@
 use transaction::*;
 use block::*;
+use mining;
 use wallet;
 use crypto;
+use database;
 
 use std::u8::{MAX};
 
@@ -11,13 +13,15 @@ use self::chrono::{UTC};
 #[test]
 fn test_transactions()
 {
+    let db = database::conn();
+
     let mut public_key: [u8; 32] = [0; 32];
     let mut private_key: [u8; 32] = [0; 32];
     wallet::get_keypair(&mut public_key, &mut private_key);
 
     let mut other_public_key: [u8; 32] = [0; 32];
     let mut other_private_key: [u8; 32] = [0; 32];
-    crypto::gen_ed25519keypair(&mut public_key, &mut private_key);
+    crypto::gen_ed25519keypair(&mut other_public_key, &mut other_private_key);
 
     let tx0_inp = vec![];
     let tx0_out = vec![
@@ -50,10 +54,10 @@ fn test_transactions()
     let mut block = Block::new_minable(
         vec![tx0, tx1],
         &[0; 32],
-        &[<u8>::max_value(); 32],
+        &[<u8>::max_value(); 32], // MAXIMUM TARGET == ZERO MINING DIFFICULTY
         0);
 
-    assert!(mine(&mut block));
-
-
+    assert!(mining::mine(&mut block)); // FAILING TO MINE THIS BLOCK SHOULD BE IMPOSSIBLE
+    assert!(database::insert_block(&block, &db).is_ok());
+    assert!(wallet::balance() == 21);
 }

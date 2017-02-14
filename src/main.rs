@@ -6,7 +6,6 @@ pub mod peer;
 mod util;
 mod network;
 mod mining;
-mod balance;
 mod database;
 mod crypto;
 mod tests;

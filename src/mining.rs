@@ -10,6 +10,9 @@ use self::rand::{Rng};
 extern crate num;
 use self::num::bigint::{BigUint, ToBigUint};
 
+extern crate chrono;
+use self::chrono::*;
+
 use transaction::*;
 use block::*;
 use util::*;
@@ -117,4 +120,12 @@ pub fn start_mining(
 
         let _ = block_snd_to_network.send(next_block);
     }
+}
+
+pub fn mine(block: &mut Block) -> bool
+{
+    block.timestamp = UTC::now().timestamp();
+    if block.nonce == i64::max_value() { block.nonce = 0; } else { block.nonce += 1; }
+    block.update_hash();
+    block.block_hash < block.target
 }

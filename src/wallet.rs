@@ -1,4 +1,5 @@
 use crypto;
+use database;
 
 use std::io::{Read, Write};
 use std::fs;
@@ -57,9 +58,10 @@ pub fn get_signature(bytes: &[u8]) -> Vec<u8>
 
 pub fn verify_signature(bytes: &[u8], sig: &[u8]) -> bool
 {
-    let mut public_key: [u8; 32] = [0; 32];
-    let mut private_key: [u8; 32] = [0; 32];
-    get_keypair(&mut public_key, &mut private_key);
+    crypto::verify_ed25519(bytes, sig, &get_public_key())
+}
 
-    crypto::verify_ed25519(bytes, sig, &public_key)
+pub fn balance() -> i64
+{
+    database::unspent_outputs(&get_public_key(), &database::conn()).iter().fold(0, |sum, txo| sum + txo.amount)
 }

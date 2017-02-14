@@ -10,10 +10,4 @@ psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_input
 psql -d chaindb -U chain -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_outputs'" | grep -q 1 || psql -d chaindb -U chain -c "CREATE TABLE tx_outputs (id bigserial PRIMARY KEY, idx bigint, amount bigint, address bytea, tx bytea references transactions(hash))"
 psql -d chaindb -U chain -c "SELECT 1 FROM peers" | grep -q 1 || psql -d chaindb -U chain -c "INSERT INTO peers (ip, port, timestamp) VALUES ('127.0.0.1', 9001, 0)"
 
-# psql -d chaindb -U chain -c "GRANT ALL ON peers TO chain"
-# psql -d chaindb -U chain -c "GRANT ALL ON blocks TO chain"
-# psql -d chaindb -U chain -c "GRANT ALL ON transactions TO chain"
-# psql -d chaindb -U chain -c "GRANT ALL ON tx_inputs TO chain"
-# psql -d chaindb -U chain -c "GRANT ALL ON tx_outputs TO chain"
-
 RUST_BACKTRACE=1 cargo run 9001

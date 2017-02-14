@@ -12,6 +12,7 @@ use self::rustyline::Editor;
 
 use std::thread;
 
+#[ignore]
 #[test]
 fn test_network()
 {
@@ -27,4 +28,7 @@ fn test_network()
             block_snd_to_mine,
             block_rcv_from_mine);
     });
+
+    let _ = quit_snd.send(());
+    let _ = network_child.join();
 }

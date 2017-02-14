@@ -1,7 +1,6 @@
 extern crate ring;
 extern crate untrusted;
 extern crate byteorder;
-extern crate chrono;
 
 use self::ring::{digest};
 
@@ -9,8 +8,6 @@ use self::byteorder::{ByteOrder, LittleEndian};
 
 use transaction::*;
 use util::{NBYTES_U64};
-
-use self::chrono::*;
 
 #[derive(PartialEq, Clone)]
 pub struct Block
@@ -66,7 +63,8 @@ impl Block
             nonce: nonce,
             block_hash: [0; 32]
         };
-        block.txs_hash.clone_from_slice(&txs_hash(&block.txs));
+        let txs_hash = block.compute_txs_hash();
+        block.txs_hash.clone_from_slice(&txs_hash);
         block.parent_hash.clone_from_slice(parent_hash);
         block.target.clone_from_slice(target);
         block
@@ -165,36 +163,33 @@ impl Block
         {
             if !tx.verify() { tx_verify = false; }
         }
-        tx_verify && block_hash(self) == self.block_hash.to_vec()
+        tx_verify && self.compute_hash() == self.block_hash.to_vec()
     }
-}
 
-pub fn txs_hash(txs: &[Transaction]) -> Vec<u8>
-{
-    let txs_hash_bytes: Vec<u8> = txs.iter().flat_map(|x| x.hash.to_vec()).collect();
-    digest::digest(&digest::SHA256, &txs_hash_bytes).as_ref().to_vec()
-}
+    pub fn update_hash(&mut self)
+    {
+        let hash = self.compute_hash();
+        self.block_hash.clone_from_slice(&hash);
+    }
 
-pub fn block_hash(block: &Block) -> Vec<u8>
-{
-    let mut block_buf: Vec<u8> = vec![];
-    block_buf.extend_from_slice(&block.txs_hash);
-    block_buf.extend_from_slice(&block.parent_hash);
-    block_buf.extend_from_slice(&block.target);
-    let mut tms_buf = [0; NBYTES_U64];
-    LittleEndian::write_i64(&mut tms_buf, block.timestamp);
-    block_buf.extend_from_slice(&tms_buf);
-    let mut nonce_buf = [0; NBYTES_U64];
-    LittleEndian::write_i64(&mut nonce_buf, block.nonce);
-    block_buf.extend_from_slice(&nonce_buf);
-    digest::digest(&digest::SHA256, &block_buf).as_ref().to_vec()
-}
+    fn compute_txs_hash(&self) -> Vec<u8>
+    {
+        let txs_hash_bytes: Vec<u8> = self.txs.iter().flat_map(|x| x.hash.to_vec()).collect();
+        digest::digest(&digest::SHA256, &txs_hash_bytes).as_ref().to_vec()
+    }
 
-pub fn mine(block: &mut Block) -> bool
-{
-    block.timestamp = UTC::now().timestamp();
-    if block.nonce == i64::max_value() { block.nonce = 0; } else { block.nonce += 1; }
-    let hash = block_hash(block);
-    block.block_hash.clone_from_slice(&hash);
-    block.block_hash < block.target
+    fn compute_hash(&self) -> Vec<u8>
+    {
+        let mut block_buf: Vec<u8> = vec![];
+        block_buf.extend_from_slice(&self.txs_hash);
+        block_buf.extend_from_slice(&self.parent_hash);
+        block_buf.extend_from_slice(&self.target);
+        let mut tms_buf = [0; NBYTES_U64];
+        LittleEndian::write_i64(&mut tms_buf, self.timestamp);
+        block_buf.extend_from_slice(&tms_buf);
+        let mut nonce_buf = [0; NBYTES_U64];
+        LittleEndian::write_i64(&mut nonce_buf, self.nonce);
+        block_buf.extend_from_slice(&nonce_buf);
+        digest::digest(&digest::SHA256, &block_buf).as_ref().to_vec()
+    }
 }

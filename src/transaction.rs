@@ -73,7 +73,7 @@ impl TxInput
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct TxOutput
 {
     pub amount:     i64,

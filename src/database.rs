@@ -5,6 +5,10 @@ use peer::*;
 extern crate postgres;
 use self::postgres::{Connection, TlsMode};
 
+#[cfg(test)]
+const DB_URL: &'static str = "postgresql://chaintest@localhost:5432/chaindbtest";
+
+#[cfg(not(test))]
 const DB_URL: &'static str = "postgresql://chain@localhost:5432/chaindb";
 
 pub enum DatabaseInsertionError
@@ -39,7 +43,7 @@ pub fn upsert_peer(peer: &Peer, db: &Connection) -> Result<(), DatabaseInsertion
     db.execute("BEGIN WORK;", &[]).unwrap();
     db.execute("LOCK TABLE blocks IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
     if db.execute(
-        "SELECT EXISTS (SELECT 1 FROM peers WHERE ip = $1 AND port = $2)",
+        "SELECT 1 FROM peers WHERE ip = $1 AND port = $2",
         &[&peer.ip, &peer.port])
         .unwrap() != 1
     {
@@ -152,7 +156,7 @@ pub fn insert_block(block: &Block, db: &Connection) -> Result<(), DatabaseInsert
     db.execute("BEGIN WORK;", &[]).unwrap();
     db.execute("LOCK TABLE blocks IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
     if db.execute(
-        "SELECT EXISTS (SELECT 1 FROM blocks WHERE block_hash = $1)",
+        "SELECT 1 FROM blocks WHERE block_hash = $1",
         &[&block.block_hash.as_ref()])
         .unwrap() != 1
     {
@@ -163,11 +167,11 @@ pub fn insert_block(block: &Block, db: &Connection) -> Result<(), DatabaseInsert
 
         for tx in block.txs.iter()
         {
-            db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
+            // db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
             for tx in block.txs.iter()
             {
                 if db.execute(
-                    "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
+                    "SELECT 1 FROM transactions WHERE hash = $1",
                     &[&tx.hash.as_ref()])
                     .unwrap() != 1
                 {
@@ -183,11 +187,11 @@ pub fn insert_block(block: &Block, db: &Connection) -> Result<(), DatabaseInsert
                             &[&txi.src_hash.as_ref(), &txi.src_idx, &txi.signature.as_ref(), &tx.hash.as_ref()])
                             .unwrap();
                     }
-                    for txo in tx.outputs.iter()
+                    for (i, txo) in tx.outputs.iter().enumerate()
                     {
                         db.execute(
-                            "INSERT INTO tx_outputs (amount, address, tx) SELECT $1, $2, $3",
-                            &[&txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
+                            "INSERT INTO tx_outputs (idx, amount, address, tx) SELECT $1, $2, $3, $4",
+                            &[&(i as i64), &txo.amount, &txo.address.as_ref(), &tx.hash.as_ref()])
                             .unwrap();
                     }
                 }
@@ -216,7 +220,7 @@ pub fn insert_transaction(tx: &Transaction, db: &Connection) -> Result<(), Datab
     db.execute("BEGIN WORK;", &[]).unwrap();
     db.execute("LOCK TABLE transactions IN SHARE ROW EXCLUSIVE MODE;", &[]).unwrap();
     if db.execute(
-        "SELECT EXISTS (SELECT 1 FROM transactions WHERE hash = $1)",
+        "SELECT 1 FROM transactions WHERE hash = $1",
         &[&tx.hash.as_ref()])
         .unwrap() != 1
     {
@@ -251,12 +255,9 @@ pub fn unspent_outputs(public_key: &[u8], db: &Connection) -> Vec<TxOutput>
 {
     let result = db.query(
         "SELECT
-        tx_inputs.src_hash, tx_inputs.src_idx
-        tx_outputs.id, tx_outputs.idx, tx_outputs.amount, tx_outputs.address, tx_outputs.tx
-        transactions.hash, transactions.block,
-        blocks.block_hash
+        tx_outputs.amount, tx_outputs.address
         FROM
-        tx_inputs, tx_outputs, transactions, blocks
+        tx_outputs, transactions, blocks
         WHERE
         tx_outputs.address = $1 AND
         tx_outputs.tx = transactions.hash AND
@@ -264,14 +265,13 @@ pub fn unspent_outputs(public_key: &[u8], db: &Connection) -> Vec<TxOutput>
         tx_outputs.id NOT IN
         (
             SELECT
-            tx_outputs.id, tx_outputs.idx, tx_outputs.tx,
-            tx_inputs.src_hash, tx_inputs.src_ix
+            tx_outputs.id
             FROM
             tx_outputs, tx_inputs
             WHERE
             tx_inputs.src_hash = tx_outputs.tx AND
             tx_inputs.src_idx = tx_outputs.idx
-        );",
+        )",
         &[&public_key])
         .unwrap()
         .iter()
