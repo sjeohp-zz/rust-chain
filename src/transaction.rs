@@ -113,6 +113,7 @@ impl TxOutput
 pub struct Transaction
 {
     pub hash:       [u8; 32],
+    pub public_key: [u8; 32],
     pub timestamp:  i64,
     pub inputs:     Vec<TxInput>,
     pub outputs:    Vec<TxOutput>,
@@ -125,11 +126,13 @@ impl Clone for Transaction
     {
         let mut clo = Transaction {
             hash: [0; 32],
+            public_key: [0; 32],
             timestamp: self.timestamp,
             inputs: self.inputs.clone(),
             outputs: self.outputs.clone(),
         };
         clo.hash.clone_from_slice(&self.hash);
+        clo.public_key.clone_from_slice(&self.public_key);
         clo
     }
 }
@@ -138,15 +141,18 @@ impl Transaction
 {
     pub fn new_with_hash(
         hash: &[u8],
+        public_key: &[u8],
         timestamp: i64) -> Transaction
     {
         let mut tx = Transaction {
             hash: [0; 32],
+            public_key: [0; 32],
             timestamp: timestamp,
             inputs: vec![],
             outputs: vec![],
         };
         tx.hash.clone_from_slice(hash);
+        tx.public_key.clone_from_slice(public_key);
         tx
     }
 
@@ -157,12 +163,14 @@ impl Transaction
     {
         let mut tx = Transaction {
             hash: [0; 32],
+            public_key: [0; 32],
             timestamp: timestamp,
             inputs: inputs,
             outputs: outputs,
         };
         tx.sign_inputs();
         tx.hash_contents();
+        tx.public_key.clone_from_slice(&wallet::get_public_key());
         tx
     }
 
@@ -237,7 +245,7 @@ impl Transaction
         let mut valid = true;
         for txi in &mut self.inputs.iter()
         {
-            valid = wallet::verify_signature(&self.signable_vec(), &txi.signature);
+            valid = wallet::verify_signature(&self.signable_vec(), &txi.signature, &self.public_key);
         }
         return valid
     }
@@ -245,8 +253,9 @@ impl Transaction
     pub fn from_slice(bytes: &[u8]) -> Transaction
     {
         let hash = &bytes[..32];
-        let timestamp = LittleEndian::read_i64(&bytes[32..40]);
-        let mut idx: usize = 40;
+        let public_key = &bytes[32..64];
+        let timestamp = LittleEndian::read_i64(&bytes[64..72]);
+        let mut idx: usize = 72;
         let inp_len = (LittleEndian::read_u32(&bytes[idx..idx+4]) as usize) * size_of::<TxInput>();
         idx += 4;
         let input_bytes = &bytes[idx..idx+(inp_len)];
@@ -280,13 +289,14 @@ impl Transaction
         }
 
         let mut tx = Transaction {
+            hash: [0; 32],
+            public_key: [0;32],
             inputs: inputs,
             outputs: outputs,
-            timestamp: timestamp,
-            hash: [0; 32]
+            timestamp: timestamp
         };
         tx.hash.clone_from_slice(&hash);
-
+        tx.public_key.clone_from_slice(&public_key);
         tx
     }
 
@@ -294,6 +304,8 @@ impl Transaction
     {
         let mut array = vec![];
         array.extend_from_slice(&self.hash);
+        array.extend_from_slice(&self.public_key);
+
         let mut ts_buf = [0; NBYTES_U64];
         LittleEndian::write_i64(&mut ts_buf, self.timestamp);
         array.extend_from_slice(&ts_buf);

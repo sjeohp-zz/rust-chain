@@ -56,12 +56,12 @@ pub fn get_signature(bytes: &[u8]) -> Vec<u8>
     crypto::sign_ed25519(bytes, &public_key, &private_key)
 }
 
-pub fn verify_signature(bytes: &[u8], sig: &[u8]) -> bool
+pub fn verify_signature(bytes: &[u8], sig: &[u8], public_key: &[u8]) -> bool
 {
-    crypto::verify_ed25519(bytes, sig, &get_public_key())
+    crypto::verify_ed25519(bytes, sig, public_key)
 }
 
-pub fn balance() -> i64
+pub fn balance(public_key: &[u8]) -> i64
 {
-    database::unspent_outputs(&get_public_key(), &database::conn()).iter().fold(0, |sum, txo| sum + txo.amount)
+    database::unspent_outputs(public_key, &database::conn()).iter().fold(0, |sum, txo| sum + txo.amount)
 }

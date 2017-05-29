@@ -4,7 +4,7 @@ extern crate rand;
 
 use self::byteorder::{ByteOrder, LittleEndian};
 
-use util::{NBYTES_U32};
+use util::{NBYTES_U32, NBYTES_U64};
 
 use self::mio::tcp::{TcpStream};
 use std::io::{Error, Read};
@@ -158,6 +158,40 @@ impl Msg
             length:     pay.len() as u32,
             checksum:   [0; 4],
             payload:    pay.as_bytes().to_vec()
+        };
+        msg.command.clone_from_slice(b"resp        ");
+        msg
+    }
+
+    pub fn new_balance_response(balance: i64) -> Msg
+    {
+        let mut pay = "blnc        ".to_owned().as_bytes().to_vec();
+        let mut buf = [0; NBYTES_U64];
+        LittleEndian::write_i64(&mut buf, balance);
+        pay.extend_from_slice(&buf);
+        let mut msg = Msg {
+            magic:      0u32,
+            command:    [0; 12],
+            length:     NBYTES_U64 as u32,
+            checksum:   [0; 4],
+            payload:    pay
+        };
+        msg.command.clone_from_slice(b"resp        ");
+        msg
+    }
+
+    pub fn new_validate_response(valid: bool) -> Msg
+    {
+        let mut pay = "vldt        ".to_owned().as_bytes().to_vec();
+        let mut buf = [0; NBYTES_U32];
+        LittleEndian::write_i32(&mut buf, if valid { 1 } else { 0 });
+        pay.extend_from_slice(&buf);
+        let mut msg = Msg {
+            magic:      0u32,
+            command:    [0; 12],
+            length:     NBYTES_U32 as u32,
+            checksum:   [0; 4],
+            payload:    pay
         };
         msg.command.clone_from_slice(b"resp        ");
         msg

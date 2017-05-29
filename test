@@ -10,7 +10,7 @@ psql -U postgres -c "CREATE DATABASE $db OWNER $user"
 
 psql -d $db -U $user -c "SELECT 1 FROM pg_tables WHERE tablename = 'peers'" | grep -q 1 || psql -d $db -U $user -c "CREATE TABLE peers (timestamp bigint, ip character varying(45), port integer, PRIMARY KEY(ip, port))"
 psql -d $db -U $user -c "SELECT 1 FROM pg_tables WHERE tablename = 'blocks'" | grep -q 1 || psql -d $db -U $user -c "CREATE TABLE blocks (txs_hash bytea, parent_hash bytea, target bytea, timestamp bigint, nonce bigint, block_hash bytea PRIMARY KEY)"
-psql -d $db -U $user -c "SELECT 1 FROM pg_tables WHERE tablename = 'transactions'" | grep -q 1 || psql -d $db -U $user -c "CREATE TABLE transactions (hash bytea PRIMARY KEY, timestamp bigint, block bytea references blocks(block_hash))"
+psql -d $db -U $user -c "SELECT 1 FROM pg_tables WHERE tablename = 'transactions'" | grep -q 1 || psql -d $db -U $user -c "CREATE TABLE transactions (hash bytea PRIMARY KEY, public_key bytea, timestamp bigint, block bytea references blocks(block_hash))"
 psql -d $db -U $user -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_inputs'" | grep -q 1 || psql -d $db -U $user -c "CREATE TABLE tx_inputs (id bigserial PRIMARY KEY, src_hash bytea, src_idx bigint, signature bytea, tx bytea references transactions(hash))"
 psql -d $db -U $user -c "SELECT 1 FROM pg_tables WHERE tablename = 'tx_outputs'" | grep -q 1 || psql -d $db -U $user -c "CREATE TABLE tx_outputs (id bigserial PRIMARY KEY, idx bigint, amount bigint, address bytea, tx bytea references transactions(hash))"
 psql -d $db -U $user -c "SELECT 1 FROM peers" | grep -q 1 || psql -d $db -U $user -c "INSERT INTO peers (ip, port, timestamp) VALUES ('127.0.0.1', 9001, 0)"

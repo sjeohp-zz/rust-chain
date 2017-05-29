@@ -86,14 +86,15 @@ pub fn blockchain(db: &Connection) -> Vec<Block>
 pub fn pending_txs(db: &Connection) -> Vec<Transaction>
 {
     db.query(
-        "SELECT hash, timestamp, block FROM transactions WHERE block NOT IN (SELECT block_hash FROM blocks);",
+        "SELECT hash, public_key, timestamp, block FROM transactions WHERE block NOT IN (SELECT block_hash FROM blocks);",
         &[])
         .unwrap()
         .iter()
         .map(|row|
             Transaction::new_with_hash(
                 &(row.get::<usize, Vec<u8>>(0)),
-                row.get(1),
+                &(row.get::<usize, Vec<u8>>(1)),
+                row.get(2),
             ))
         .collect()
 }
@@ -223,8 +224,8 @@ pub fn insert_transaction(tx: &Transaction, db: &Connection) -> Result<(), Datab
         .unwrap() != 1
     {
         db.execute(
-            "INSERT INTO transactions (hash, timestamp) SELECT $1, $2",
-            &[&tx.hash.as_ref(), &tx.timestamp])
+            "INSERT INTO transactions (hash, public_key, timestamp) SELECT $1, $2, $3",
+            &[&tx.hash.as_ref(), &tx.public_key.as_ref(), &tx.timestamp])
             .unwrap();
         for txi in tx.inputs.iter()
         {

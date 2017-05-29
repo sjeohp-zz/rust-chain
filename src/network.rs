@@ -1,10 +1,17 @@
+use database;
+use transaction::*;
+use peer::*;
+use message::*;
+use block::*;
+use wallet;
+
 extern crate mio;
 extern crate chrono;
 extern crate postgres;
-extern crate byteorder;
 extern crate rand;
 
-// use self::byteorder::{ByteOrder, LittleEndian};
+extern crate byteorder;
+use self::byteorder::{ByteOrder, LittleEndian};
 
 // use util::{NBYTES_U64, NBYTES_U32};
 
@@ -23,12 +30,6 @@ use std::net;
 
 // use std::thread;
 // use self::rand::{thread_rng, Rng};
-
-use database;
-use transaction::*;
-use peer::*;
-use message::*;
-use block::*;
 
 const QUIT_TOKEN: Token = Token(0);
 const MINED_BLOCK_TOKEN: Token = Token(1);
@@ -306,6 +307,9 @@ fn handle_message(
                             }
                             b"blnc        " => {
                                 print!(" balance\n");
+                                rcv_blnc(
+                                    &msg.payload,
+                                    peers);
                             }
                             b"addt        " => {
                                 rcv_addt(
@@ -315,6 +319,9 @@ fn handle_message(
                             }
                             b"vdlt        " => {
                                 print!(" validate transaction\n");
+                                rcv_vldt(
+                                    &msg.payload,
+                                    peers);
                             }
                             b"pent        " => {
                                 print!(" pending transactions\n");
@@ -357,6 +364,16 @@ fn handle_message(
                                             server,
                                             peers,
                                             db);
+                                    }
+                                    b"blnc        " =>
+                                    {
+                                        rcv_resp_blnc(
+                                            &msg.payload[12..]);
+                                    }
+                                    b"vldt        " =>
+                                    {
+                                        rcv_resp_vldt(
+                                            &msg.payload[12..]);
                                     }
                                     _ => {}
                                 }
@@ -499,6 +516,51 @@ fn rcv_resp_lisp(
     }
 }
 
+pub fn rcv_blnc(
+    payload: &[u8],
+    peers: &mut Vec<Peer>)
+{
+    let cmpts: Vec<&[u8]> = payload.split({|x| *x == ',' as u8}).collect();
+    if cmpts.len() == 2
+    {
+        let balance = wallet::balance(cmpts[0]);
+        let cmpts: Vec<&[u8]> = cmpts[1].split({|x| *x == ':' as u8}).collect();
+
+        if cmpts.len() == 2
+        {
+            let ip = String::from_utf8(cmpts[0].to_vec()).unwrap();
+            let port = String::from_utf8(cmpts[1].to_vec()).unwrap().parse::<i32>().unwrap();
+
+            match peers.iter_mut().position(|p| p.ip == ip && p.port == port)
+            {
+                Some(peer_idx) =>
+                {
+                    let mut stream = peers[peer_idx].clone().socket.unwrap();
+
+                    let msg = Msg::new_balance_response(balance).to_vec();
+                    match stream.write(&msg)
+                    {
+                        Ok(nbytes) => {
+                            println!("resp_blnc bytes written: {} at {}", nbytes, UTC::now().time());
+                        }
+                        Err(e) => {
+                            println!("Error writing to stream: {}", e);
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+}
+
+pub fn rcv_resp_blnc(
+    payload: &[u8])
+{
+    let balance = LittleEndian::read_i64(&payload);
+    println!("Balance received: {}", balance);
+}
+
 pub fn rcv_addt(
     payload: &[u8],
     db: &Connection,
@@ -518,6 +580,54 @@ pub fn rcv_addt(
     {
         println!("Invalid transaction");
     }
+}
+
+pub fn rcv_vldt(
+    payload: &[u8],
+    peers: &mut Vec<Peer>)
+{
+    println!("rcv_vldt");
+
+    let cmpts: Vec<&[u8]> = payload.split({|x| *x == ',' as u8}).collect();
+    if cmpts.len() == 2
+    {
+        let mut tx = Transaction::from_slice(cmpts[0]);
+        let valid = tx.verify();
+
+        let cmpts: Vec<&[u8]> = cmpts[1].split({|x| *x == ':' as u8}).collect();
+        if cmpts.len() == 2
+        {
+            let ip = String::from_utf8(cmpts[0].to_vec()).unwrap();
+            let port = String::from_utf8(cmpts[1].to_vec()).unwrap().parse::<i32>().unwrap();
+
+            match peers.iter_mut().position(|p| p.ip == ip && p.port == port)
+            {
+                Some(peer_idx) =>
+                {
+                    let mut stream = peers[peer_idx].clone().socket.unwrap();
+
+                    let msg = Msg::new_validate_response(valid).to_vec();
+                    match stream.write(&msg)
+                    {
+                        Ok(nbytes) => {
+                            println!("resp_vldt bytes written: {} at {}", nbytes, UTC::now().time());
+                        }
+                        Err(e) => {
+                            println!("Error writing to stream: {}", e);
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+}
+
+pub fn rcv_resp_vldt(
+    payload: &[u8])
+{
+    let valid = LittleEndian::read_i32(&payload);
+    println!("Valid received: {}", valid);
 }
 
 pub fn rcv_addb(

@@ -57,5 +57,5 @@ fn test_transactions()
 
     assert!(mining::mine(&mut block)); // FAILING TO MINE THIS BLOCK SHOULD BE IMPOSSIBLE
     assert!(database::insert_block(&block, &db).is_ok());
-    assert!(wallet::balance() == 21);
+    assert!(wallet::balance(&wallet::get_public_key()) == 21);
 }
